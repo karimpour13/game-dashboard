@@ -8,11 +8,12 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
     />
-    <link rel="stylesheet" href="style.css" />
     <link
       rel="stylesheet"
       href="libs/jalalidatepicker/jalalidatepicker.min.css"
     />
+    <link rel="stylesheet" href="libs/nice-select2/nice-select2.css" />
+    <link rel="stylesheet" href="style.css" />
   </head>
 
   <body>
@@ -165,23 +166,30 @@
                 type="text"
                 id="datePickerInput"
                 data-jdp
-                placeholder="۱۴۰۳/۰۱/۰۱"
+                placeholder="1405/01/01"
                 autocomplete="off"
               />
             </div>
             <div class="input-group">
               <label>شماره میز</label>
-              <select id="tableSelect"></select>
+              <select
+                id="tableSelect"
+                class="nice-select"
+                dir="rtl"
+                style="width: 100%"
+              >
+                <!-- گزینه‌ها توسط جاوااسکریپت شما پر می‌شوند -->
+              </select>
             </div>
             <div class="input-group">
               <label>حالت بازی</label>
-              <select id="modeSelect">
-                <option value="1 دسته">1 دسته</option>
-                <option value="2 دسته" selected>2 دسته</option>
-                <option value="3 دسته">3 دسته</option>
-                <option value="4 دسته">4 دسته</option>
-                <option value="معمولی">معمولی (PC)</option>
-                <option value="VIP">VIP (PC)</option>
+              <select
+                id="modeSelect"
+                class="nice-select"
+                dir="rtl"
+                style="width: 100%"
+              >
+                <!-- گزینه‌ها به صورت داینامیک توسط updateModeSelectOptions پر می‌شوند -->
               </select>
             </div>
             <div class="input-group">
@@ -213,18 +221,23 @@
             </button>
           </div>
 
-          <div
+          <!-- <div
             class="summary-bar"
             style="align-items: center; justify-content: space-between"
           >
             <div style="display: flex; gap: 15px; flex-wrap: wrap">
               <div class="stat-box">
-                <span>امروز:</span
-                ><span class="stat-value" id="currentDayDisplay">شنبه</span>
+                <span class="stat-value" id="currentDayDisplay">شنبه</span>
               </div>
               <div class="stat-box">
                 <span>رکوردهای بسته:</span
                 ><span class="stat-value" id="recordCountDisplay">0</span>
+              </div>
+              <div class="stat-box">
+                <span>🖥️ دستگاه‌های فعال:</span>
+                <span class="stat-value" id="activeDevicesCount">0</span>
+                <span>از</span>
+                <span class="stat-value" id="totalDevicesCount">0</span>
               </div>
               <div class="stat-box">
                 <span>درآمد ثبت شده:</span
@@ -235,20 +248,68 @@
                   >*** (کلیک کنید)</span
                 >
               </div>
+
+              <div class="stat-box">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="showClosedSessionsToggle" />
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">نمایش جلسات بسته</span>
+                </label>
+              </div>
             </div>
-            <button
-              id="sortBtn"
-              class="btn btn-top"
-              style="
-                border-color: var(--primary);
-                color: var(--primary);
-                height: 40px;
-                margin: 0;
-              "
-              onclick="sortTableByTime()"
-            >
-              ⏳ مرتب‌سازی زمان
-            </button>
+            <select id="sortSelect" class="btn-top">
+              <option value="default">📋 پیش‌فرض (جدیدترین)</option>
+              <option value="duration_desc">⏱️ بیشترین زمان سپری شده</option>
+              <option value="duration_asc">⏱️ کمترین زمان سپری شده</option>
+              <option value="reserved_near">🔔 رزروهای نزدیک</option>
+            </select>
+          </div> -->
+          <div class="summary-bar">
+            <!-- خط اول: تاریخ + ابزارها -->
+            <div class="summary-row summary-row-top">
+              <div class="stat-box">
+                <span id="currentDayPrefix"></span>
+                <span class="stat-value" id="currentDayDisplay"
+                  >جمعه (1405/03/22)</span
+                >
+              </div>
+              <div class="summary-actions">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="showClosedSessionsToggle" />
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">نمایش جلسات بسته</span>
+                </label>
+                <select id="sortSelect" class="sort-select">
+                  <option value="default">📋 پیش‌فرض (جدیدترین)</option>
+                  <option value="duration_desc">⏱️ بیشترین زمان بازی</option>
+                  <option value="duration_asc">⏱️ کمترین زمان بازی</option>
+                  <option value="reserved_near">🔔 رزروهای نزدیک</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- خط دوم: آمار -->
+            <div class="summary-row summary-row-bottom">
+              <div class="stat-box">
+                <span>📊 رکوردهای بسته:</span>
+                <span class="stat-value" id="recordCountDisplay">0</span>
+              </div>
+              <div class="stat-box">
+                <span>🖥️ دستگاه‌های فعال:</span>
+                <span class="stat-value" id="totalDevicesCount">0</span>
+                <span>/</span>
+                <span class="stat-value" id="activeDevicesCount">0</span>
+              </div>
+              <div class="stat-box">
+                <span>💰درآمد ثبت شده:</span>
+                <span
+                  class="stat-value hidden-income"
+                  id="totalAmountDisplay"
+                  onclick="revealIncome()"
+                  >*** (کلیک کنید)</span
+                >
+              </div>
+            </div>
           </div>
 
           <div style="overflow-x: auto">
@@ -260,7 +321,7 @@
                   <th>زمان شروع / رزرو</th>
                   <th>تایمر / خروج</th>
                   <th>سفارشات / کافه</th>
-                  <th>مبلغ کل (تومان)</th>
+                  <th id="totalAmountHeader">مبلغ کل (تومان)</th>
                   <th>عملیات</th>
                 </tr>
               </thead>
@@ -568,7 +629,7 @@
               background: var(--input-bg);
               color: var(--text-main);
               padding: 8px;
-              font-family: &quot;PortadaARA&quot;, monospace;
+              font-family: 'PortadaARA', monospace;
             "
           ></textarea>
         </div>
@@ -702,7 +763,40 @@
             >تخفیف مبلغی به صورت مستقیم از کل هزینه نهایی کسر می‌شود.</small
           >
         </div>
-
+        <div id="extraChargeSection" style="margin-bottom: 20px">
+          <label style="color: var(--warning)"
+            >➕ هزینه اضافی (جریمه / خدمات ویژه)</label
+          >
+          <div
+            class="form-grid"
+            style="grid-template-columns: 1fr 1fr; gap: 10px"
+          >
+            <div class="input-group">
+              <label>درصد اضافی (%)</label>
+              <input
+                type="number"
+                id="editExtraPercent"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+                style="text-align: center"
+              />
+            </div>
+            <div class="input-group">
+              <label>مبلغ اضافی (تومان)</label>
+              <input
+                type="text"
+                id="editExtraFixed"
+                style="text-align: left"
+                oninput="liveNumberFormat(this)"
+              />
+            </div>
+          </div>
+          <small style="color: var(--text-muted)"
+            >این مبلغ به هزینه نهایی اضافه می‌شود (قبل از اعمال تخفیف).</small
+          >
+        </div>
         <!-- بخش تنظیم تایمر معکوس (فقط برای جلسات فعال نمایش داده می‌شود) -->
         <div id="countdownControl" style="display: none; margin-bottom: 20px">
           <div class="input-group">
@@ -746,7 +840,7 @@
               background: var(--input-bg);
               color: var(--text-main);
               padding: 8px;
-              font-family: &quot;PortadaARA&quot;, monospace;
+              font-family: 'PortadaARA', monospace;
               white-space: pre-wrap;
             "
           ></textarea>
@@ -825,7 +919,7 @@
             background: var(--input-bg);
             color: var(--text-main);
             padding: 10px;
-            font-family: &quot;PortadaARA&quot;, monospace;
+            font-family: 'PortadaARA', monospace;
             font-size: 0.9rem;
             white-space: pre-wrap;
             margin: 15px 0;
@@ -993,6 +1087,25 @@
             تومان ← ۱۷۵,۰۰۰ تومان | ۹۸,۰۰۰ تومان ← ۹۵,۰۰۰ تومان
           </div>
         </div>
+        <div class="general-settings-rule">
+          <div class="rule-header">
+            <span class="rule-title"
+              >💰 گرد کردن قیمت به بالا (مضرب ۵۰۰۰ تومان)</span
+            >
+            <label class="rule-toggle">
+              <input
+                type="checkbox"
+                id="roundUpPriceToggle"
+                onchange="updateRoundUpPrice(this.checked)"
+              />
+              <span class="toggle-label">فعال</span>
+            </label>
+          </div>
+          <div class="rule-description">
+            در صورت فعال بودن، مبالغ نهایی به بالا و به نزدیک‌ترین مضرب ۵۰۰۰
+            تومان گرد می‌شوند. مثال: ۱۳,۰۰۰ تومان ← ۱۵,۰۰۰ تومان.
+          </div>
+        </div>
         <!-- فیلد جدید رمز عبور سیستم -->
         <div class="input-group" style="margin-bottom: 15px">
           <label>🔒 رمز عبور سیستم (اختیاری)</label>
@@ -1146,7 +1259,8 @@
       </div>
     </div>
 
-    <script src="script.js"></script>
     <script src="libs/jalalidatepicker/jalalidatepicker.min.js"></script>
+    <script src="libs/nice-select2/nice-select2.js"></script>
+    <script src="script.js"></script>
   </body>
 </html>

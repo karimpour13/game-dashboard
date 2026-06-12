@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const historySchema = new mongoose.Schema(
   {
@@ -9,17 +9,17 @@ const historySchema = new mongoose.Schema(
     table: String,
     action: String,
   },
-  { _id: false },
+  { _id: false }
 );
 
 const cafeItemSchema = new mongoose.Schema(
   {
-    id: { type: mongoose.Schema.Types.ObjectId, ref: "CafeItem" },
+    id: { type: mongoose.Schema.Types.ObjectId, ref: 'CafeItem' },
     name: String,
     price: Number,
     qty: Number,
   },
-  { _id: false },
+  { _id: false }
 );
 
 const logSchema = new mongoose.Schema(
@@ -30,21 +30,21 @@ const logSchema = new mongoose.Schema(
     gameCost: Number,
     cafeCost: Number,
   },
-  { _id: false },
+  { _id: false }
 );
 
 const sessionSchema = new mongoose.Schema(
   {
     gameNetId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "GameNet",
+      ref: 'GameNet',
       required: true,
     },
     table: String,
     status: {
       type: String,
-      enum: ["active", "reserved", "closed"],
-      default: "active",
+      enum: ['active', 'reserved', 'closed'],
+      default: 'active',
     },
     timeStart: String,
     timeEnd: String,
@@ -53,6 +53,7 @@ const sessionSchema = new mongoose.Schema(
     customerName: String,
     customerPhone: String,
     reservedDay: String, // روز هفته رزرو
+    reserveTimestamp: { type: Number, default: null },
     date: String, // تاریخ شمسی
     history: [historySchema],
     cafeItems: [cafeItemSchema],
@@ -61,12 +62,14 @@ const sessionSchema = new mongoose.Schema(
     discountPercent: { type: Number, default: 0 },
     discountFixed: { type: Number, default: 0 },
     totalAmount: { type: Number, default: 0 },
+    extraPercent: { type: Number, default: 0 },
+    extraFixed: { type: Number, default: 0 },
     note: String,
     logs: [logSchema],
     countdownEnd: Date,
     startTimeMs: Number, // برای تایمر زنده در فرانت (اختیاری)
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-module.exports = mongoose.model("Session", sessionSchema);
+module.exports = mongoose.model('Session', sessionSchema);

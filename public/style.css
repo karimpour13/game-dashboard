@@ -1009,15 +1009,17 @@ th {
 }
 
 .note-toggle-btn {
-    background: none;
-    border: none;
-    color: var(--primary);
-    cursor: pointer;
-    padding: 0;
-    margin: 0;
-    font-size: 0.75rem;
-    display: inline;
-    white-space: nowrap;
+     background: none !important;
+  border: none !important;
+  padding: 0 4px !important;
+  margin: 0 4px !important;
+  font-size: 0.8rem !important;
+  font-weight: normal !important;
+  color: var(--primary) !important;
+  cursor: pointer !important;
+  display: inline !important;
+  white-space: nowrap !important;
+  text-decoration: underline !important;
 }
 
 .note-toggle-btn:hover {
@@ -2069,9 +2071,7 @@ th {
     border: none !important;
 }
 
-#deviceForm .mode-check:hover {
-    transform: scale(1.05);
-}
+ 
 
 /* برچسب چک‌باکس‌ها */
 #deviceForm label:has(.mode-check) {
@@ -2168,6 +2168,368 @@ th {
   white-space: nowrap !important;
 }
 
+.stat-label {
+  color: white;
+}
+.stat-value {
+  color: var(--primary);
+}
+/* ================== استایل تقویم شمسی ================== */
+ 
+ .jdp-days{
+     background: var(--input-bg) !important;
+      
+ }
+ 
+
+.jdp-icon-plus svg,
+.jdp-icon-minus svg {
+  fill: var(--primary) !important;
+}
+
+.jdp-day-name {
+  color: var(--text-muted) !important;
+}
+
+.jdp-day {
+  background: var(--input-bg) !important;
+  color: var(--text-main) !important;
+}
+.jdp-day:hover {
+  background: var(--primary) !important;
+  color: #000 !important;
+}
+.jdp-day.holly-day {
+  color: var(--warning) !important;
+}
+.jdp-day.today {
+  background: var(--secondary) !important;
+  color: #fff !important;
+}
+.jdp-day.selected {
+  background: var(--primary) !important;
+  color: #000 !important;
+ 
+}
+
+.jdp-footer {
+  border-top-color: rgba(150,150,150,0.2) !important;
+}
+.jdp-btn-today {
+  background: var(--panel-bg) !important;
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+.jdp-btn-today:hover {
+  background: var(--primary) !important;
+  color: #000 !important;
+}
+ 
+/* ========== استایل nice-select2 برای جستجوی میز (RTL + هماهنگ با تم) ========== */
+
+#tableSelect,
+#modeSelect{
+    display: none;
+}
+/* کانتینر اصلی */
+.nice-select {
+  background: var(--input-bg) !important;
+  border: 1px solid rgba(150, 150, 150, 0.3) !important;
+  border-radius: 6px !important;
+  padding: 8px 16px !important;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  width: 100% !important;
+  box-sizing: border-box;
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.nice-select:hover {
+  border-color: var(--primary) !important;
+ 
+}
+
+.nice-select.open {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(0, 243, 255, 0.2) !important;
+}
+
+/* فلش (مثلث) سمت چپ در RTL */
+.nice-select:after {
+  right: auto !important;
+  left: 16px !important;
+  margin-top: -2px;
+  border-color: var(--text-muted) !important;
+}
+
+.nice-select.open:after {
+  border-color: var(--primary) !important;
+}
+
+/* متن انتخاب شده */
+.nice-select .current {
+  color: var(--text-main) !important;
+  font-size: 0.95rem;
+  font-weight: normal;
+  flex: 1;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* دراپ‌دان (لیست کشویی) */
+.nice-select-dropdown {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--primary) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  box-sizing: border-box;
+  margin-top: 4px !important;
+  max-height: 280px;
+  overflow-y: auto;
+  direction: rtl;
+  text-align: right;
+}
+
+
+/* نوار اسکرول دراپ‌دان */
+.nice-select-dropdown::-webkit-scrollbar {
+  width: 4px;
+ 
+}
+.nice-select-dropdown::-webkit-scrollbar-track {
+   margin: 10px 1px;
+  
+  border-radius: 10px;
+}
+.nice-select-dropdown::-webkit-scrollbar-thumb {
+  background: var(--text-muted) ;
+  border-radius: 10px;
+}
+
+/* باکس جستجو */
+.nice-select-search-box {
+  padding: 8px !important;
+ }
+
+.nice-select-search {
+   
+  width: 94% !important;
+  
+}
+
+.nice-select-search:focus {
+  border-color: var(--primary) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 243, 255, 0.2);
+}
+
+/* لیست گزینه‌ها */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nice-select .list{
+    max-height: unset !important;
+}
+/* هر گزینه */
+.nice-select-option {
+  padding: 10px 16px !important;
+  font-size: 0.9rem;
+  color: var(--text-muted) !important;
+  border-bottom: 1px solid rgba(150, 150, 150, 0.1);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-align: right;
+  direction: rtl !important;
+  white-space: normal;
+  word-break: break-word;
+}
+ 
+
+/* گزینه انتخاب شده */
+.nice-select-option.selected {
+  background: var(--primary) !important;
+  color: #000 !important;
+  font-weight: bold;
+}
+
+.nice-select .option.focus, .nice-select .option.selected.focus{
+    background-color: var(--primary) !important;
+}
+.nice-select .list:hover .option:hover{
+    background-color:var(--primary) !important;
+}
+/* برای اطمینان از اعمال روی کلاس‌های دیگر */
+.option {
+  composes: nice-select-option;
+}
+.nice-select,
+.nice-select-dropdown,
+.nice-select-option,
+.option {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+/* حذف افکت‌های اضافی */
+.nice-select:active, .nice-select:focus {
+  outline: none;
+}
+ 
+
+/* سلکتور مرتب‌سازی - هماهنگ با دکمه‌های top */
+#sortSelect {
+  background: var(--panel-bg);
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  color: var(--primary);
+  padding: 8px 12px;
+  width: 170px;
+  height: 40px;
+  font-family: 'PortadaARA', sans-serif;
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s;
+  direction: rtl;
+}
+
+#sortSelect:hover {
+  box-shadow: 0 0 8px var(--primary);
+}
+
+#sortSelect option {
+  background: var(--panel-bg);
+  color: var(--text-main);
+}
+
+.security-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100px;        /* عرض ثابت */
+  justify-content: flex-end;
+  cursor: pointer;
+}
+
+.security-status-text {
+  display: inline-block;
+  width: 70px;          /* عرض ثابت برای هر دو متن */
+  text-align: center;
+  font-size: 0.8rem;
+  margin-bottom: .5rem;
+}
+ .summary-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(150, 150, 150, 0.05);
+  padding: 15px;
+  border-radius: 8px;
+  border-right: 3px solid var(--secondary);
+  margin-bottom: 20px;
+  width: 100%;
+  
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px; 
+  width: 100%;
+}
+
+.summary-row-top {
+  border-bottom: 1px dashed rgba(150, 150, 150, 0.2);
+  padding-bottom: 8px;
+}
+
+.summary-row-bottom {
+  justify-content: flex-start;   /* ← تغییر اصلی */
+  width: 100%;
+}
+.summary-actions {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+ 
+ 
+/* استایل سلکتور مرتب‌سازی (یکسان با dکمه‌های top) */
+.sort-select {
+  background: var(--panel-bg);
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  color: var(--primary);
+  padding: 6px 12px;
+  width: 180px;
+  height: 36px;
+  font-family: 'PortadaARA', sans-serif;
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+}
+ 
+
+/* استایل سوئیچ (در صورت نیاز به تنظیم مجدد) */
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-slider {
+  width: 44px;
+  height: 24px;
+  background: var(--input-bg);
+  border-radius: 34px;
+  border: 1px solid rgba(150,150,150,0.3);
+  position: relative;
+  transition: 0.3s;
+}
+
+.toggle-slider::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  transition: 0.3s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(-20px);
+  background: #000;
+}
+
+.toggle-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
 /* ====================================================== */
 /* ====================================================== */
 /* ====================================================== */
@@ -2589,59 +2951,7 @@ th {
     --btn-cafe-bg: linear-gradient(45deg, #d98a4a, #ffe0db);
 }
 
-/* اعمال حاشیه و افکت‌های مرجانی در تم اعماق دریا (فقط در این تم) */
-[data-theme="deep-coral"] select,
-[data-theme="deep-coral"] input[type="time"],
-[data-theme="deep-coral"] input[type="number"],
-[data-theme="deep-coral"] .container input[type="text"],
-[data-theme="deep-coral"] .modal-content input,
-[data-theme="deep-coral"] .modal-content select,
-[data-theme="deep-coral"] .modal-content textarea {
-    border-color: var(--border-color) !important;
-    box-shadow: 0 0 6px rgba(255, 122, 110, 0.5) !important;
-    background: var(--input-bg) !important;
-}
-
-[data-theme="deep-coral"] table th,
-[data-theme="deep-coral"] table td {
-    border-bottom-color: rgba(255, 122, 110, 0.3) !important;
-}
-
-[data-theme="deep-coral"] .container {
-    box-shadow: 0 0 20px rgba(255, 90, 79, 0.2), inset 0 0 0 1px rgba(255, 224, 219, 0.2);
-}
-
-[data-theme="deep-coral"] .modal-content {
-    border: 1px solid var(--border-color) !important;
-    box-shadow: 0 0 30px rgba(255, 63, 51, 0.4) !important;
-}
-
-[data-theme="deep-coral"] .btn-top {
-    border-color: var(--border-color) !important;
-    color: #ffb0a8 !important;
-}
-
-[data-theme="deep-coral"] .btn-top:hover {
-    box-shadow: 0 0 12px var(--border-color) !important;
-}
-
-[data-theme="deep-coral"] .stat-value {
-    color: #b0df94 !important;
-    text-shadow: 0 0 6px rgba(158, 197, 127, 0.5) !important;
-}
-
-[data-theme="deep-coral"] .badge-table {
-    background: rgba(158, 197, 127, 0.2);
-    border-color: #b0df94;
-    color: #e0ffc0;
-}
-
-[data-theme="deep-coral"] .badge-mode {
-    background: rgba(255, 224, 219, 0.15);
-    border-color: #ffe0db;
-    color: #ffc2b8;
-}
-
+ 
 
 /* ================== تم فول کنتراست (شبیه High Contrast) ================== */
 [data-theme="high-contrast"] {
@@ -2711,6 +3021,19 @@ th {
 [data-theme="high-contrast"] .btn-settings-blue {
     color: #ffffff !important;
     /* سفید - برای زرد عدد #ffff00 را بگذار */
+}
+[data-theme="high-contrast"] .nice-select .option.focus,
+[data-theme="high-contrast"]  .nice-select .option.selected.focus{
+    background-color: #36d6dc !important;
+}
+[data-theme="high-contrast"] .nice-select .list:hover .option:hover{
+    background-color: #36d6dc !important;
+}
+[data-theme="high-contrast"] .nice-select {
+  background: var(--input-bg) !important;
+  border: 2px solid #fff !important;
+  min-height: 54px;
+  border-radius: 8px;
 }
 
 

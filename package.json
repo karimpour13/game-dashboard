@@ -20,6 +20,7 @@
     "express-validator": "^7.3.2",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
+    "moment-jalali": "^0.3.9",
     "mongoose": "^9.6.3",
     "morgan": "^1.11.0",
     "node-cron": "^4.2.1"

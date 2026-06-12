@@ -1,6 +1,6 @@
 // قیمت ساعتی را بر اساس کنسول، حالت، و تنظیمات دستگاه (از Device) دریافت می‌کند
 // فرض می‌کنیم یک تابع getPricingRate داریم که از دیتابیس می‌خواند
-const Device = require("../modules/device/device.model");
+const Device = require('../modules/device/device.model');
 
 // محاسبه هزینه یک بازه (start تا end)
 async function getPeriodCost(
@@ -10,17 +10,17 @@ async function getPeriodCost(
   consoleType,
   tableName,
   gameNetId,
-  getRateFunc,
+  getRateFunc
 ) {
   const startMin =
-    parseInt(startStr.split(":")[0]) * 60 + parseInt(startStr.split(":")[1]);
+    parseInt(startStr.split(':')[0]) * 60 + parseInt(startStr.split(':')[1]);
   let endMin =
-    parseInt(endStr.split(":")[0]) * 60 + parseInt(endStr.split(":")[1]);
+    parseInt(endStr.split(':')[0]) * 60 + parseInt(endStr.split(':')[1]);
   if (endMin < startMin) endMin += 24 * 60;
   const minutes = endMin - startMin;
   if (minutes <= 0) return { minutes, rate: 0, cost: 0 };
   const rate = await getRateFunc(consoleType, mode, tableName, gameNetId); // ← await اضافه شد
-  const rateNum = typeof rate === "number" && !isNaN(rate) ? rate : 0;
+  const rateNum = typeof rate === 'number' && !isNaN(rate) ? rate : 0;
   const cost = Math.floor((minutes / 60) * rateNum);
   return { minutes, rate: rateNum, cost };
 }
@@ -30,11 +30,11 @@ async function getPricingRate(consoleType, mode, tableName, gameNetId) {
   // جستجوی دستگاه با نام یکسان (حساس به حروف بزرگ/کوچک نیست)
   const device = await Device.findOne({
     gameNetId,
-    name: { $regex: new RegExp(`^${cleanTableName}$`, "i") },
+    name: { $regex: new RegExp(`^${cleanTableName}$`, 'i') },
   });
   if (!device) {
     console.warn(
-      `Device not found for table: "${cleanTableName}" (original: "${tableName}")`,
+      `Device not found for table: "${cleanTableName}" (original: "${tableName}")`
     );
     return 0;
   }
@@ -78,7 +78,7 @@ async function calculateCost(session, endTimeStr, gameNetSettings) {
       p.consoleType,
       p.table,
       session.gameNetId,
-      getPricingRate,
+      getPricingRate
     );
     totalMinutes += minutes;
     totalWeightedRate += minutes * rate;
@@ -100,18 +100,21 @@ async function calculateCost(session, endTimeStr, gameNetSettings) {
   }
 
   let gameCost = Math.round(
-    (effectiveMinutes / 60) * (totalWeightedRate / totalMinutes),
+    (effectiveMinutes / 60) * (totalWeightedRate / totalMinutes)
   );
-
   if (isNaN(gameCost)) gameCost = 0;
 
-  // گرد کردن قیمت بر اساس تنظیمات
-  if (useRoundDownPrice) {
-    const roundBase = priceUnit === "Rial" ? 50000 : 5000;
+  // گرد کردن بر اساس تنظیمات
+  const roundBase = priceUnit === 'Rial' ? 50000 : 5000;
+
+  if (gameNetSettings.useRoundUpPrice) {
+    gameCost = Math.ceil(gameCost / roundBase) * roundBase;
+  } else if (gameNetSettings.useRoundDownPrice) {
     gameCost = Math.floor(gameCost / roundBase) * roundBase;
   } else {
-    const roundBase = priceUnit === "Rial" ? 10000 : 1000;
-    gameCost = Math.floor(gameCost / roundBase) * roundBase;
+    // حالت پیش‌فرض: بدون گرد کردن یا گرد به پایین هزار تومانی (اختیاری)
+    const defaultBase = priceUnit === 'Rial' ? 10000 : 1000;
+    gameCost = Math.floor(gameCost / defaultBase) * defaultBase;
   }
 
   if (isNaN(gameCost)) gameCost = 0;
