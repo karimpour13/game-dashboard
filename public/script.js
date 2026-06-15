@@ -111,9 +111,24 @@ async function loadCafeMenuFromAPI() {
 // بارگذاری جلسات یک روز از API
 async function loadSessionsFromAPI(date) {
   const gameNetId = await getCurrentGameNetId();
-  const sessions = await apiFetch(
+  let sessions = await apiFetch(
     `/api/v1/sessions?gameNetId=${gameNetId}&date=${date}`
   );
+  if (sessions && Array.isArray(sessions)) {
+    sessions = sessions.map((session) => {
+      if (session.status === 'active') {
+        const storedEnd = loadCountdownFromLocalStorage(session._id);
+        if (storedEnd) {
+          session.countdownEnd = storedEnd;
+          session.countdownActive = true;
+        } else {
+          session.countdownEnd = null;
+          session.countdownActive = false;
+        }
+      }
+      return session;
+    });
+  }
   gameNet[date] = sessions;
 }
 
@@ -446,6 +461,7 @@ async function updateGameNetName(value) {
 
 async function updatePriceUnit(value) {
   currentPriceUnit = value;
+
   await saveGeneralSettingsToAPI();
   updateTotalAmountHeader();
   render();
@@ -486,15 +502,8 @@ function attachLiveFormatting(element) {
 
 function roundFinalPrice(amount) {
   if (isNaN(amount)) return 0;
-  const roundBase = currentPriceUnit === 'Rial' ? 50000 : 5000;
-  if (USE_ROUND_UP_PRICE) {
-    return Math.ceil(amount / roundBase) * roundBase;
-  } else if (USE_ROUND_DOWN_PRICE) {
-    return Math.floor(amount / roundBase) * roundBase;
-  } else {
-    const defaultBase = currentPriceUnit === 'Rial' ? 10000 : 1000;
-    return Math.floor(amount / defaultBase) * defaultBase;
-  }
+
+  return amount;
 }
 
 function getValidModesForTable(tableName) {
@@ -861,8 +870,36 @@ function sortSessions(sessions, sortBy) {
         return timeA - timeB;
       });
     default: // پیش‌فرض: جدیدترین جلسه ساخته شده (بر اساس startTimeMs
-      return copy.sort((a, b) => (b.startTimeMs || 0) - (a.startTimeMs || 0));
+      return copy.sort((a, b) => {
+        const timeA = a.createdAt
+          ? new Date(a.createdAt).getTime()
+          : a.startTimeMs || 0;
+        const timeB = b.createdAt
+          ? new Date(b.createdAt).getTime()
+          : b.startTimeMs || 0;
+        return timeB - timeA;
+      });
   }
+}
+function saveCountdownToLocalStorage(sessionId, endTime) {
+  if (endTime) {
+    localStorage.setItem(`countdown_${sessionId}`, endTime.toString());
+  } else {
+    localStorage.removeItem(`countdown_${sessionId}`);
+  }
+}
+
+function loadCountdownFromLocalStorage(sessionId) {
+  const stored = localStorage.getItem(`countdown_${sessionId}`);
+  if (stored && !isNaN(parseInt(stored))) {
+    const endTime = parseInt(stored);
+    if (endTime > Date.now()) {
+      return endTime;
+    } else {
+      localStorage.removeItem(`countdown_${sessionId}`);
+    }
+  }
+  return null;
 }
 function initSortSelect() {
   const sortSelect = document.getElementById('sortSelect');
@@ -1557,6 +1594,8 @@ async function initSystem() {
   await loadSessionsFromAPI(currentDate);
   generateTableSelect();
   initTimePickerBehavior();
+  setupDiscountSync();
+  setupExtraSync();
   // 5. رندر جدول و شروع تایمر
   render();
   if (timerInterval) clearInterval(timerInterval);
@@ -1819,14 +1858,28 @@ function sortTableByTime() {
 async function addPayment(sessionId) {
   const session = getSessionById(sessionId);
   if (!session) return;
-  const amount = await customPrompt(
-    'لطفا مبلغ پیش‌پرداخت (تومان) را وارد کنید:',
+
+  const unitText = currentPriceUnit === 'Rial' ? 'ریال' : 'تومان';
+  const amountRaw = await customPrompt(
+    `لطفا مبلغ پیش‌پرداخت (${unitText}) را وارد کنید:`,
     'number'
   );
-  if (amount === null || isNaN(amount) || amount <= 0) return;
+  if (amountRaw === null || isNaN(amountRaw) || amountRaw <= 0) return;
+
+  // تبدیل به تومان (سرور فقط تومان قبول می‌کند)
+  let amountInToman = amountRaw;
+  if (currentPriceUnit === 'Rial') {
+    // اگر کاربر ریال وارد کرده، باید بر ۱۰ تقسیم شود (چون ۱۰ ریال = ۱ تومان)
+    amountInToman = Math.round(amountRaw / 10);
+    if (amountInToman <= 0) {
+      customAlert(`مبلغ وارد شده کمتر از ۱۰ ریال است.`);
+      return;
+    }
+  }
+
   try {
     const gameNetId = await getCurrentGameNetId();
-    const body = { amount, gameNetId };
+    const body = { amount: amountInToman, gameNetId };
     if (userRole !== 'superAdmin') delete body.gameNetId;
     await apiFetch(`/api/v1/sessions/${session._id}/payment`, {
       method: 'POST',
@@ -2123,143 +2176,153 @@ function renderTrashModal() {
   });
 }
 
+function getEventTypePersian(type) {
+  const mapping = {
+    session_start: 'شروع جلسه',
+    session_close: 'بستن جلسه',
+    mode_change: 'تغییر دسته',
+    table_change: 'انتقال میز',
+    cafe_order: 'سفارش کافه',
+    payment: 'پرداخت',
+    edit: 'ویرایش جلسه',
+    reservation: 'رزرو میز',
+    reservation_start: 'شروع از رزرو',
+    reactivate: 'ادامه جلسه',
+  };
+  return mapping[type] || type; // در صورت نبود، همان کلید برگردانده شود
+}
+
 function showSessionLogsFromData(session, title) {
   const logs = session.logs || [];
   const tbody = document.getElementById('logsTableBody');
   const tfoot = document.getElementById('logsTableFoot');
   tbody.innerHTML = '';
 
-  let prevGameCost = 0;
-  let prevCafeCost = 0;
-  let totalGameDelta = 0;
-  let totalCafeDelta = 0;
+  const convertAmount = (amountInToman) =>
+    currentPriceUnit === 'Rial' ? amountInToman * 10 : amountInToman;
+  const formatAbsolute = (amountInToman) =>
+    convertAmount(amountInToman).toLocaleString() +
+    (currentPriceUnit === 'Rial' ? ' ریال' : ' تومان');
 
-  function convertAmount(amountInToman) {
-    if (currentPriceUnit === 'Rial') return amountInToman * 10;
-    return amountInToman;
-  }
-  function getCurrencyIconHtml() {
-    if (currentPriceUnit === 'Rial') {
-      return `<svg style="width: 16px; height: 19px; fill: var(--text-muted); display: inline-block; vertical-align: middle; margin-right: 2px;"><use xlink:href="#rial"></use></svg>`;
+  // به‌روزرسانی هدر ستون‌ها
+  const modal = document.getElementById('sessionLogsModal');
+  if (modal) {
+    const headers = modal.querySelectorAll('thead th');
+    if (headers.length >= 5) {
+      const unitText = currentPriceUnit === 'Rial' ? 'ریال' : 'تومان';
+      headers[3].innerText = `هزینه کنسول (${unitText})`;
+      headers[4].innerText = `هزینه کافه (${unitText})`;
     }
-    return TOMAN_ICON;
-  }
-  function formatDelta(valueInToman) {
-    const converted = convertAmount(valueInToman);
-    const sign = converted >= 0 ? '+' : '';
-    const color =
-      converted > 0 ? '#00ff66' : converted < 0 ? '#ff5555' : '#8892b0';
-    return `<span style="color: ${color};">${sign}${converted.toLocaleString()} ${getCurrencyIconHtml()}</span>`;
-  }
-  function formatAbsolute(amountInToman) {
-    const converted = convertAmount(amountInToman);
-    return `${converted.toLocaleString()} ${getCurrencyIconHtml()}`;
   }
 
-  const eventIcons = {
-    'شروع بازی': '🎮',
-    'بستن جلسه': '🔒',
-    'تغییر دسته': '🔄',
-    'انتقال میز': '🚚',
-    پرداخت: '💰',
-    'ویرایش رکورد': '✏️',
-    'تغییر سفارش کافه': '☕',
-    رزرو: '📅',
-    'ویرایش رزرو': '📝',
-  };
-  function getEventIcon(eventType) {
-    return eventIcons[eventType] || '📌';
-  }
+  // پیدا کردن آخرین لاگ session_close (برای استخراج مقادیر نهایی)
+  const closeLog = logs.filter((l) => l.type === 'session_close').pop();
+  let finalTotal = null;
+  let gameCost = 0,
+    cafeCost = 0,
+    extraAmount = 0,
+    discountAmount = 0,
+    paidAmount = session.paidAmount || 0;
 
-  if (logs.length === 0) {
-    tbody.innerHTML =
-      '<tr><td colspan="5" style="text-align:center;">هیچ رویدادی ثبت نشده است. </tr>';
+  if (closeLog && closeLog.data) {
+    finalTotal = closeLog.data.finalTotal;
+    gameCost = closeLog.data.gameCost || 0;
+    cafeCost = closeLog.data.cafeCost || 0;
+    extraAmount = closeLog.data.extraAmount || 0;
+    discountAmount = closeLog.data.discountAmount || 0;
+    paidAmount =
+      closeLog.data.paidAmount !== undefined
+        ? closeLog.data.paidAmount
+        : paidAmount;
   } else {
-    logs.forEach((log) => {
-      const absoluteGame = log.gameCost || 0;
-      const absoluteCafe = log.cafeCost || 0;
-      const deltaGame = absoluteGame - prevGameCost;
-      const deltaCafe = absoluteCafe - prevCafeCost;
-      totalGameDelta += deltaGame;
-      totalCafeDelta += deltaCafe;
-      prevGameCost = absoluteGame;
-      prevCafeCost = absoluteCafe;
-
-      const row = tbody.insertRow();
-      row.insertCell(0).innerHTML =
-        `<div style="text-align:center">${log.timestamp}</div>`;
-      row.insertCell(1).innerHTML =
-        `<div style="text-align:center">${getEventIcon(log.eventType)} ${log.eventType || 'رویداد'}</div>`;
-      row.insertCell(2).innerHTML =
-        `<div style="text-align:right">${log.message}</div>`;
-      row.insertCell(3).innerHTML =
-        `<div style="text-align:left">${formatDelta(deltaGame)}</div>`;
-      row.insertCell(4).innerHTML =
-        `<div style="text-align:left">${formatDelta(deltaCafe)}</div>`;
-    });
+    // fallback
+    finalTotal = session.totalAmount;
+    gameCost = session.gameCost || 0;
+    cafeCost = session.cafeCost || 0;
+    extraAmount =
+      session.extraFixed ||
+      (session.extraPercent ? (gameCost * session.extraPercent) / 100 : 0);
+    discountAmount =
+      session.discountFixed ||
+      (session.discountPercent
+        ? ((gameCost + cafeCost) * session.discountPercent) / 100
+        : 0);
   }
 
-  const paid = session.paidAmount || 0;
-  const totalBeforePaid = totalGameDelta + totalCafeDelta;
-  const net = totalBeforePaid - paid;
+  // رندر هر لاگ
+  logs.forEach((log) => {
+    let logGameCost =
+      log.data?.gameCost ?? (log.type === 'session_close' ? gameCost : 0);
+    let logCafeCost =
+      log.data?.cafeCost ?? (log.type === 'session_close' ? cafeCost : 0);
+    const row = tbody.insertRow();
+    const persianType = getEventTypePersian(log.type);
+    row.insertCell(0).innerHTML =
+      `<div style="text-align:center">${new Date(log.timestamp).toLocaleTimeString('fa-IR')}</div>`;
+    row.insertCell(1).innerHTML =
+      `<div style="text-align:center">${getEventIcon(log.type)} ${persianType}</div>`;
+    row.insertCell(2).innerHTML =
+      `<div style="text-align:right">${formatStructuredLog(log, currentPriceUnit)}</div>`;
+    row.insertCell(3).innerHTML =
+      `<div style="text-align:left">${formatAbsolute(logGameCost)}</div>`;
+    row.insertCell(4).innerHTML =
+      `<div style="text-align:left">${formatAbsolute(logCafeCost)}</div>`;
+  });
 
-  let discountAmount = 0;
-  if (session.discountFixed && session.discountFixed > 0) {
-    discountAmount = session.discountFixed;
-  } else if (session.discountPercent && session.discountPercent > 0) {
-    discountAmount = Math.round((net * session.discountPercent) / 100);
-  }
-  const netAfterDiscount = net - discountAmount;
-  const roundedNet = roundFinalPrice(netAfterDiscount);
-  const finalAmount = netAfterDiscount >= 0 ? roundedNet : Math.abs(roundedNet);
+  // محاسبه نهایی با ترتیب صحیح: (بازی+کافه) + اضافی - تخفیف - پیش‌پرداخت
+  let subtotal = gameCost + cafeCost;
+  let afterExtra = subtotal + extraAmount;
+  let afterDiscount = afterExtra - discountAmount;
+  let finalPayable = afterDiscount - paidAmount;
+  const roundedPayable = roundFinalPrice(finalPayable);
   const finalMessage =
-    netAfterDiscount >= 0
-      ? `💰 مبلغ نهایی قابل پرداخت (بازی + کافه − پیش‌پرداخت − تخفیف) - ${getRoundingDescription()}`
-      : `🔄 مبلغ بستانکاری به مشتری (پیش‌پرداخت بیشتر از هزینه کل) - ${getRoundingDescription()}`;
-  const finalColor = netAfterDiscount >= 0 ? 'var(--primary)' : '#ffaa00';
+    finalPayable >= 0
+      ? `💰 مبلغ نهایی قابل پرداخت - ${getRoundingDescription()}`
+      : `🔄 مبلغ بستانکاری به مشتری - ${getRoundingDescription()}`;
+  const finalColor = finalPayable >= 0 ? 'var(--success)' : '#ffaa00';
 
-  const roundedTotalGameDelta = roundFinalPrice(totalGameDelta);
-  const roundedTotalCafeDelta = roundFinalPrice(totalCafeDelta);
-
-  let paidRow =
-    paid > 0
-      ? `<tr style="border-top: 1px solid var(--warning);">
-        <td colspan="3" style="text-align:left; font-weight:bold;">💰 پیش‌پرداخت ثبت شده</td>
-        <td colspan="2" style="text-align:left; color: var(--warning);">- ${formatAbsolute(paid)}</td>
-      </tr>`
-      : '';
-
-  let discountRow =
-    discountAmount > 0
-      ? `<tr style="border-top: 1px solid var(--primary);">
+  // ساخت ردیف‌های فوتر (ترتیب درست: جمع کل، سپس اضافی، سپس تخفیف، سپس پیش‌پرداخت، سپس نتیجه)
+  tfoot.innerHTML = `
+    <tr style="border-top:2px solid var(--primary);">
+      <td colspan="3" style="text-align:left; font-weight:bold;">جمع هزینه بازی + کافه  </td>
+      <td style="text-align:left;">${formatAbsolute(gameCost)}</td>
+      <td style="text-align:left;">${formatAbsolute(cafeCost)}</td>
+     </tr>
+     ${
+       extraAmount > 0
+         ? `<tr>
+        <td colspan="3" style="text-align:left; font-weight:bold;">➕ هزینه اضافی (جریمه/خدمات)</td>
+        <td colspan="2" style="text-align:left; color: var(--success);">+ ${formatAbsolute(extraAmount)}</td>
+     </tr>`
+         : ''
+     }
+     ${
+       discountAmount > 0
+         ? `<tr>
         <td colspan="3" style="text-align:left; font-weight:bold;">🏷️ تخفیف اعمال شده</td>
         <td colspan="2" style="text-align:left; color: #ffaa00;">- ${formatAbsolute(discountAmount)}</td>
-      </tr>`
-      : '';
-
-  tfoot.innerHTML = `
-    ${paidRow}
-    ${discountRow}
-    <tr style="border-top: 2px solid var(--primary);">
-      <td colspan="3" style="text-align:left; font-weight:bold;">جمع کل تغییرات (بازی + کافه) - ${getRoundingDescription()}</td>
-      <td style="text-align:left;">${formatAbsolute(roundedTotalGameDelta)}</td>
-      <td style="text-align:left;">${formatAbsolute(roundedTotalCafeDelta)}</td>
-    </tr>
-    <tr style="background: rgba(0,243,255,0.1);">
+     </tr>`
+         : ''
+     }
+     ${
+       paidAmount > 0
+         ? `<tr>
+        <td colspan="3" style="text-align:left; font-weight:bold;">💰 پیش‌پرداخت ثبت شده</td>
+        <td colspan="2" style="text-align:left; color: var(--warning);">- ${formatAbsolute(paidAmount)}</td>
+     </tr>`
+         : ''
+     }
+    <tr style="border-top:2px solid var(--primary); background: rgba(0,243,255,0.1);">
       <td colspan="3" style="text-align:left; font-weight:bold;">${finalMessage}</td>
-      <td colspan="2" style="text-align:left; font-size:1.1rem; color: ${finalColor};">
-        ${formatAbsolute(Math.abs(roundedNet))}
-      </td>
+      <td colspan="2" style="text-align:left; font-size:1.1rem; color: ${finalColor};">${formatAbsolute(Math.abs(roundedPayable))}</td>
     </tr>
   `;
 
-  const modal = document.getElementById('sessionLogsModal');
   modal.style.display = 'flex';
   modal.style.zIndex = '2100';
   const modalTitle = modal.querySelector('h3');
   if (modalTitle) modalTitle.innerText = title || '📜 گزارش رویدادهای میز';
 }
-
 function openChangeModeModal(sessionId) {
   const session = getSessionById(sessionId);
   if (!session) return;
@@ -2710,6 +2773,8 @@ function checkAndNotifyCountdownTimers() {
       if (Date.now() >= session.countdownEnd) {
         session.countdownActive = false;
         session.countdownEnd = null;
+        saveCountdownToLocalStorage(session._id, null);
+
         needRender = true;
         let tableName =
           TABLE_CONFIGS[session.table]?.customName || session.table;
@@ -2742,16 +2807,6 @@ function updateCountdownTooltips() {
     }
   });
 }
-
-// ================== توابع یادداشت ==================
-// یادداشت‌ها کامنت شدند (حذف دکمه‌ها)
-// function updateSessionNote(index, text) { ... }
-// let currentNoteSessionIndex = null;
-// function openNoteModal(index) { ... }
-// function closeDedicatedNoteModal() { ... }
-// function saveDedicatedNote() { ... }
-// document.getElementById('saveDedicatedNoteBtn').addEventListener('click', saveDedicatedNote);
-// document.getElementById('closeDedicatedNoteBtn').addEventListener('click', closeDedicatedNoteModal);
 
 // ================== مودال لاگ با ستون‌های جدید و جمع کل ==================
 // ================== مودال لاگ با آیکون، دلتا، کسر پیش‌پرداخت و نمایش بستانکاری ==================
@@ -2919,21 +2974,54 @@ async function openEditModal(sessionId) {
   window._oldSessionForEdit = JSON.parse(JSON.stringify(session));
   document.getElementById('editTimeStart').value = session.timeStart;
   document.getElementById('editModeSelect').value = session.mode;
+
+  const unitText = currentPriceUnit === 'Rial' ? 'ریال' : 'تومان';
+  const discountFixedLabel = document.querySelector(
+    '#discountSection .input-group:last-child label'
+  );
+  if (discountFixedLabel)
+    discountFixedLabel.innerText = `مبلغ تخفیف (${unitText})`;
   const discountPercentInput = document.getElementById('editDiscountPercent');
   const discountFixedInput = document.getElementById('editDiscountFixed');
-  if (discountPercentInput)
-    discountPercentInput.value = session.discountPercent || 0;
-  if (discountFixedInput)
-    discountFixedInput.value = session.discountFixed
-      ? formatNumberWithCommas(session.discountFixed)
-      : '';
+
+  if (discountPercentInput && discountFixedInput) {
+    if (session.discountPercent && session.discountPercent !== 0) {
+      discountPercentInput.value = session.discountPercent;
+      discountFixedInput.value = '';
+    } else if (session.discountFixed && session.discountFixed !== 0) {
+      discountPercentInput.value = '';
+      // تبدیل مبلغ تومان به واحد جاری (ریال یا تومان)
+      let displayAmount = session.discountFixed;
+      if (currentPriceUnit === 'Rial')
+        displayAmount = session.discountFixed * 10;
+      discountFixedInput.value = formatNumberWithCommas(displayAmount);
+    } else {
+      discountPercentInput.value = '';
+      discountFixedInput.value = '';
+    }
+  }
+
+  const extraFixedLabel = document.querySelector(
+    '#extraChargeSection .input-group:last-child label'
+  );
+  if (extraFixedLabel) extraFixedLabel.innerText = `مبلغ اضافی (${unitText})`;
   const extraPercentInput = document.getElementById('editExtraPercent');
   const extraFixedInput = document.getElementById('editExtraFixed');
-  if (extraPercentInput) extraPercentInput.value = session.extraPercent || 0;
-  if (extraFixedInput)
-    extraFixedInput.value = session.extraFixed
-      ? formatNumberWithCommas(session.extraFixed)
-      : '';
+  if (extraPercentInput && extraFixedInput) {
+    if (session.extraPercent && session.extraPercent !== 0) {
+      extraPercentInput.value = session.extraPercent;
+      extraFixedInput.value = '';
+    } else if (session.extraFixed && session.extraFixed !== 0) {
+      extraPercentInput.value = '';
+      let displayAmount = session.extraFixed;
+      if (currentPriceUnit === 'Rial') displayAmount = session.extraFixed * 10;
+      extraFixedInput.value = formatNumberWithCommas(displayAmount);
+    } else {
+      extraPercentInput.value = '';
+      extraFixedInput.value = '';
+    }
+  }
+
   const noteInput = document.getElementById('editNoteInput');
   if (noteInput) noteInput.value = session.note || '';
   const endGroup = document.getElementById('editTimeEndGroup');
@@ -2943,6 +3031,29 @@ async function openEditModal(sessionId) {
   } else {
     endGroup.style.display = 'none';
   }
+
+  // ========== تایمر معکوس ==========
+  const countdownDiv = document.getElementById('countdownControl');
+  const countdownStatusSpan = document.getElementById('countdownStatus');
+  if (session.status === 'active') {
+    if (countdownDiv) countdownDiv.style.display = 'block';
+    if (countdownStatusSpan) {
+      if (session.countdownActive && session.countdownEnd) {
+        let remainingSec = Math.max(
+          0,
+          (session.countdownEnd - Date.now()) / 1000
+        );
+        let remainingMin = Math.ceil(remainingSec / 60);
+        countdownStatusSpan.innerText = `⏲️ تایمر فعال: ${remainingMin} دقیقه باقی مانده`;
+      } else {
+        countdownStatusSpan.innerText = 'تایمر فعال نیست';
+      }
+    }
+  } else {
+    if (countdownDiv) countdownDiv.style.display = 'none';
+  }
+  // ================================
+
   document.getElementById('editModal').style.display = 'flex';
   initTimePickerBehavior();
   updateTimePickerColorScheme();
@@ -2966,6 +3077,7 @@ function setCountdownFromEdit() {
   const now = Date.now();
   session.countdownEnd = now + minutes * 60 * 1000;
   session.countdownActive = true;
+  saveCountdownToLocalStorage(session._id, session.countdownEnd);
   // به‌روزرسانی وضعیت در مودال
   document.getElementById('countdownStatus').innerText =
     `⏲️ تایمر ${minutes} دقیقه‌ای تنظیم شد.`;
@@ -2982,6 +3094,7 @@ function clearCountdownFromEdit() {
 
   session.countdownActive = false;
   session.countdownEnd = null;
+  saveCountdownToLocalStorage(session._id, null);
   document.getElementById('countdownStatus').innerText = 'تایمر لغو شد.';
   render();
   customAlert('تایمر معکوس لغو شد.');
@@ -3045,16 +3158,66 @@ async function saveEdit() {
     customAlert('جلسه یافت نشد');
     return;
   }
+
   const updates = {};
+
+  // 1. دریافت مقادیر پایه
   const newTimeStart = document.getElementById('editTimeStart').value;
   const newMode = document.getElementById('editModeSelect').value;
-  const newDiscountPercent =
-    parseFloat(document.getElementById('editDiscountPercent').value) || 0;
-  const newDiscountFixed =
-    parseNumberFromFormatted(
-      document.getElementById('editDiscountFixed').value
-    ) || 0;
   const newNote = document.getElementById('editNoteInput').value;
+
+  // 2. تخفیف (درصد و مبلغ ثابت) با همگام‌سازی
+  let newDiscountPercent = parseInt(
+    document.getElementById('editDiscountPercent').value,
+    10
+  );
+  if (isNaN(newDiscountPercent)) newDiscountPercent = 0;
+  let newDiscountFixedRaw = parseNumberFromFormatted(
+    document.getElementById('editDiscountFixed').value
+  );
+  if (isNaN(newDiscountFixedRaw)) newDiscountFixedRaw = 0;
+  // تبدیل به تومان اگر واحد ریال است
+  let newDiscountFixed = newDiscountFixedRaw;
+  if (currentPriceUnit === 'Rial')
+    newDiscountFixed = Math.round(newDiscountFixedRaw / 10);
+
+  // محدودیت درصد
+  if (newDiscountPercent > 100) newDiscountPercent = 100;
+  if (newDiscountPercent < 0) newDiscountPercent = 0;
+  // همگام‌سازی: اگر درصد >0 باشد، مبلغ ثابت را صفر کن
+  if (newDiscountPercent > 0) newDiscountFixed = 0;
+  else if (newDiscountFixed > 0) newDiscountPercent = 0;
+
+  // اگر فقط مبلغ ثابت > 0 باشد، درصد را صفر می‌کنیم (قبلاً صفر است)
+  // البته اگر کاربر همزمان هر دو را پر کرده بود، درصد اولویت داشت
+
+  // 3. هزینه اضافی (درصد و مبلغ ثابت)
+  let newExtraPercent = parseInt(
+    document.getElementById('editExtraPercent').value,
+    10
+  );
+  if (isNaN(newExtraPercent)) newExtraPercent = 0;
+  let newExtraFixedRaw = parseNumberFromFormatted(
+    document.getElementById('editExtraFixed').value
+  );
+  if (isNaN(newExtraFixedRaw)) newExtraFixedRaw = 0;
+  let newExtraFixed = newExtraFixedRaw;
+  if (currentPriceUnit === 'Rial')
+    newExtraFixed = Math.round(newExtraFixedRaw / 10);
+
+  if (newExtraPercent > 100) newExtraPercent = 100;
+  if (newExtraPercent < 0) newExtraPercent = 0;
+  if (newExtraPercent > 0) newExtraFixed = 0;
+  else if (newExtraFixed > 0) newExtraPercent = 0;
+
+  // 4. زمان پایان (فقط برای جلسات بسته)
+  const endTimeInput = document.getElementById('editTimeEnd');
+  let newTimeEnd = null;
+  if (endTimeInput && endTimeInput.value && session.status === 'closed') {
+    newTimeEnd = endTimeInput.value;
+  }
+
+  // 5. ساختن آبجکت updates فقط در صورت تغییر
   if (newTimeStart && newTimeStart !== session.timeStart)
     updates.timeStart = newTimeStart;
   if (newMode && newMode !== session.mode) updates.mode = newMode;
@@ -3063,27 +3226,20 @@ async function saveEdit() {
   if (newDiscountFixed !== (session.discountFixed || 0))
     updates.discountFixed = newDiscountFixed;
   if (newNote !== (session.note || '')) updates.note = newNote;
-
-  const newExtraPercent =
-    parseFloat(document.getElementById('editExtraPercent').value) || 0;
-  const newExtraFixed =
-    parseNumberFromFormatted(document.getElementById('editExtraFixed').value) ||
-    0;
-
   if (newExtraPercent !== (session.extraPercent || 0))
     updates.extraPercent = newExtraPercent;
   if (newExtraFixed !== (session.extraFixed || 0))
     updates.extraFixed = newExtraFixed;
+  if (newTimeEnd !== null && newTimeEnd !== session.timeEnd)
+    updates.timeEnd = newTimeEnd;
 
-  const endTimeInput = document.getElementById('editTimeEnd');
-  if (endTimeInput && endTimeInput.value && session.status === 'closed') {
-    const newTimeEnd = endTimeInput.value;
-    if (newTimeEnd !== session.timeEnd) updates.timeEnd = newTimeEnd;
-  }
+  // اگر هیچ تغییری نکرده بود، مودال را ببند
   if (Object.keys(updates).length === 0) {
     closeEditModal();
     return;
   }
+
+  // 6. ارسال درخواست به سرور
   try {
     const gameNetId = await getCurrentGameNetId();
     const body = {
@@ -3095,12 +3251,14 @@ async function saveEdit() {
       gameNetId,
     };
     if (userRole !== 'superAdmin') delete body.gameNetId;
+
     await apiFetch(`/api/v1/sessions/${sessionId}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     });
-    const currentDate = currentSelectedDate;
-    await loadSessionsFromAPI(currentDate);
+
+    // بارگذاری مجدد و رندر
+    await loadSessionsFromAPI(currentSelectedDate);
     render();
     closeEditModal();
   } catch (err) {
@@ -3352,7 +3510,7 @@ async function render() {
       timeEndHtml = `<span class="live-timer" id="timer_${s._id}">00:00:00</span>`;
       if (s.countdownEnd) {
         const endMs = new Date(s.countdownEnd).getTime();
-        timeEndHtml += `<span class="change-indicator countdown-timer" data-end="${endMs}" data-session="${s._id}">⏲️ <span class="custom-tooltip"></span></span>`;
+        timeEndHtml += `<span class="change-indicator countdown-timer" data-end="${endMs}" data-session="${s._id}">⏲️ <span class="custom-tooltip">زمان باقیمانده: ${formatRemainingTime(endMs - Date.now())}</span></span>`;
       }
     } else if (s.status === 'reserved') {
       if (s.reserveTimestamp) {
@@ -4505,24 +4663,456 @@ function addDiscountLog(
 }
 
 // مدیریت همزمان دو فیلد تخفیف (در مودال ویرایش)
-function setupDiscountFieldsSync() {
+function enforceNumberOnly(inputElement) {
+  inputElement.addEventListener('input', function (e) {
+    this.value = this.value.replace(/[^0-9]/g, '');
+    if (this.value === '') return;
+    let num = parseInt(this.value, 10);
+    if (num > 100) this.value = '100';
+    if (num < 0) this.value = '0';
+  });
+}
+
+// تابع همگام‌سازی تخفیف (درصد و مبلغ)
+function setupDiscountSync() {
   const percentInput = document.getElementById('editDiscountPercent');
   const fixedInput = document.getElementById('editDiscountFixed');
   if (!percentInput || !fixedInput) return;
 
-  percentInput.oninput = () => {
-    if (percentInput.value && parseFloat(percentInput.value) > 0) {
+  // فقط عدد در درصد مجاز باشد
+  enforceNumberOnly(percentInput);
+  // فرمت خودکار مبلغ (ویرگول)
+  if (typeof liveNumberFormat === 'function') {
+    fixedInput.addEventListener('input', () => liveNumberFormat(fixedInput));
+  }
+
+  percentInput.addEventListener('input', function () {
+    let val = this.value.trim();
+    if (val !== '' && parseInt(val, 10) > 0) {
       fixedInput.value = '';
     }
-  };
-  fixedInput.oninput = () => {
-    let fixedVal = parseNumberFromFormatted(fixedInput.value);
-    if (fixedVal > 0) {
+  });
+
+  fixedInput.addEventListener('input', function () {
+    let raw = this.value.replace(/,/g, '');
+    if (raw !== '' && parseInt(raw, 10) > 0) {
       percentInput.value = '';
     }
-  };
+  });
 }
 
+// تابع همگام‌سازی هزینه اضافی
+function setupExtraSync() {
+  const percentInput = document.getElementById('editExtraPercent');
+  const fixedInput = document.getElementById('editExtraFixed');
+  if (!percentInput || !fixedInput) return;
+
+  enforceNumberOnly(percentInput);
+  if (typeof liveNumberFormat === 'function') {
+    fixedInput.addEventListener('input', () => liveNumberFormat(fixedInput));
+  }
+
+  percentInput.addEventListener('input', function () {
+    let val = this.value.trim();
+    if (val !== '' && parseInt(val, 10) > 0) {
+      fixedInput.value = '';
+    }
+  });
+
+  fixedInput.addEventListener('input', function () {
+    let raw = this.value.replace(/,/g, '');
+    if (raw !== '' && parseInt(raw, 10) > 0) {
+      percentInput.value = '';
+    }
+  });
+}
+
+function formatMoneyWithColor(amount, type = 'default') {
+  if (amount === undefined || amount === null) return '-';
+  let displayAmount = amount;
+  let unit = currentPriceUnit === 'Rial' ? 'ریال' : 'تومان';
+  if (currentPriceUnit === 'Rial') displayAmount = amount * 10;
+  const formatted = displayAmount.toLocaleString() + ' ' + unit;
+  let color = '';
+  switch (type) {
+    case 'rate':
+      color = 'var(--primary)'; // آبی پررنگ برای نرخ ساعتی
+      break;
+    case 'positive':
+      color = 'var(--success)'; // سبز برای اضافه‌شده
+      break;
+    case 'negative':
+      color = 'var(--warning)'; // قرمز/نارنجی برای کم‌شده
+      break;
+    default:
+      color = 'var(--text-main)';
+  }
+  return `<span style="color: ${color};">${formatted}</span>`;
+}
+function getEventIcon(eventType) {
+  const icons = {
+    session_start: '🎮',
+    session_close: '🔒',
+    mode_change: '🔄',
+    table_change: '🚚',
+    cafe_order: '☕',
+    payment: '💰',
+    edit: '✏️',
+    reservation: '📅',
+    reservation_start: '▶️',
+    reactivate: '🔄',
+  };
+  return icons[eventType] || '📌';
+}
+function formatStructuredLog(log, currentPriceUnit) {
+  const type = log.type;
+  const data = log.data;
+  const timestamp = new Date(log.timestamp).toLocaleTimeString('fa-IR');
+  const icons = {
+    session_start: '🎮',
+    session_close: '🔒',
+    mode_change: '🔄',
+    table_change: '🚚',
+    cafe_order: '☕',
+    payment: '💰',
+    edit: '✏️',
+    reservation: '📅',
+    reservation_start: '▶️',
+    reactivate: '🔄',
+  };
+  const icon = icons[type] || '📌';
+
+  const formatMoney = (amount) => {
+    if (amount === undefined || amount === null) return '-';
+    if (currentPriceUnit === 'Rial')
+      return (amount * 10).toLocaleString() + ' ریال';
+    return amount.toLocaleString() + ' تومان';
+  };
+
+  switch (type) {
+    case 'session_start': {
+      const rate =
+        data.pricingRate ||
+        getPricingRate(data.consoleType, data.mode, data.table);
+      return `
+    <div class="log-entry">  
+      <div class="log-details">
+        شروع بازی روی <span style="color: var(--primary); font-weight: bold;">${escapeHtml(data.table)}</span> با حالت <span style="color: var(--warning); font-weight: bold;">${escapeHtml(data.mode)}</span><br>
+        کنسول: ${escapeHtml(data.consoleType)}<br>
+        نرخ ساعتی: ${formatMoneyWithColor(rate, 'rate')}
+      </div>
+    </div>
+  `;
+    }
+    case 'session_close': {
+      // 1. نمایش بازه‌ها (مانند نمونه قدیم)
+      let periodsHtml = '';
+      if (data.periodsDetails && data.periodsDetails.length) {
+        periodsHtml = data.periodsDetails
+          .map((p, idx) => {
+            const tableName = TABLE_CONFIGS[p.table]?.customName || p.table;
+            return `
+        <div style="margin-bottom: 4px;">
+          <span class="log-detail-line">• بازه ${idx + 1}: <span class="log-highlight">${p.minutes} دقیقه</span> روی <span class="log-name">${escapeHtml(tableName)}</span> (<span class="log-console">${escapeHtml(p.consoleType)}</span> - <span class="log-mode">${escapeHtml(p.mode)}</span>) با نرخ ${formatMoney(p.rate)} در ساعت</span> 
+          <span style="margin-right: 20px; color: var(--success);">هزینه ${formatMoney(p.cost)}</span>
+        </div>
+      `;
+          })
+          .join('');
+      }
+      let extraHtml = '';
+      if (data.extraAmount && data.extraAmount !== 0) {
+        let extraText = '';
+        if (data.extraPercent && data.extraPercent !== 0) {
+          extraText = `${data.extraPercent}% (${formatMoney(data.extraAmount)})`;
+        } else if (data.extraFixed && data.extraFixed !== 0) {
+          extraText = `${formatMoney(data.extraFixed)}`;
+        }
+        extraHtml = `<div style="margin-top: 5px;">➕ هزینه اضافی: <span style="color: var(--success); font-weight: bold;">${extraText}</span></div>`;
+      }
+
+      // 2. قانون حداقل یک ساعت
+      const totalMinutes = data.totalMinutes || 0;
+      const hasChanges = data.hasChanges;
+      const useMinimumHour = data.useMinimumHour;
+      let ruleHtml = '';
+
+      if (totalMinutes < 60) {
+        if (!hasChanges) {
+          if (useMinimumHour) {
+            ruleHtml = `<span class="log-info">⏱️ مجموع زمان بازی ${totalMinutes} دقیقه (کمتر از ۱ ساعت) و هیچ تغییری در دسته/میز رخ نداده است. با توجه به فعال بودن گزینه «حداقل یک ساعت»، هزینه یک ساعت کامل محاسبه شده است.</span>`;
+          } else {
+            ruleHtml = `<span class="log-info">⏱️ مجموع زمان بازی ${totalMinutes} دقیقه (کمتر از ۱ ساعت) اما گزینه «حداقل یک ساعت» غیرفعال است، بنابراین هزینه بر اساس دقیقه واقعی محاسبه گردیده است.</span>`;
+          }
+        } else {
+          ruleHtml = `<span class="log-info">⏱️ مجموع زمان بازی ${totalMinutes} دقیقه (کمتر از ۱ ساعت) اما به دلیل تغییر دسته/میز، قانون «حداقل یک ساعت» اعمال نمی‌شود و هزینه بر اساس دقیقه واقعی محاسبه شده است.</span>`;
+        }
+      } else {
+        ruleHtml = `<span class="log-info">⏱️ مجموع زمان بازی ${totalMinutes} دقیقه (≥ ۱ ساعت). هزینه بر اساس دقیقه واقعی محاسبه شده است.</span>`;
+      }
+
+      // 3. هزینه نهایی بازی (بدون عبارت اضافی)
+      const gameCostRounded = roundFinalPrice(data.gameCost);
+      const costInfo = `<span class="log-info">💰 هزینه نهایی بازی (گرد شده): <span style="color: var(--success); font-weight: bold;">${formatMoney(gameCostRounded)}</span></span>`;
+      // 4. جدول نهایی کافه (با حذف خطوط تکراری)
+      let cafeTableHtml = '';
+      if (data.cafeItems && data.cafeItems.length > 0) {
+        let tableRows = '';
+        let totalCafe = 0;
+        data.cafeItems.forEach((item) => {
+          const itemTotal = item.qty * item.price;
+          totalCafe += itemTotal;
+          tableRows += `<tr style="border-bottom:1px solid rgba(150,150,150,0.2);">
+        <td style="text-align:right; padding:4px;">${escapeHtml(item.name)}</td>
+        <td style="text-align:center; padding:4px;">${item.qty}</td>
+        <td style="text-align:left; padding:4px;">${formatMoney(item.price)}</td>
+        <td style="text-align:left; padding:4px; color:var(--success);">${formatMoney(itemTotal)}</td>
+      </td>`;
+        });
+        cafeTableHtml = `
+      <div style="margin-top: 10px;">
+        <span class="log-info">☕ سفارشات کافه:</span><br>
+        <table class="log-cafe-table" style="width:100%; border-collapse:collapse; margin-top:5px; font-size:0.8rem;">
+          <thead><tr style="border-bottom:1px solid var(--primary);">
+            <th style="text-align:right; padding:4px;">آیتم</th>
+            <th style="text-align:center; padding:4px;">تعداد</th>
+            <th style="text-align:left; padding:4px;">قیمت واحد</th>
+            <th style="text-align:left; padding:4px;">جمع</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot><tr style="border-top:2px solid var(--primary);">
+            <td colspan="3" style="text-align:left; font-weight:bold;">جمع کل کافه</td>
+            <td style="text-align:left; font-weight:bold; color:var(--success);">${formatMoney(totalCafe)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    `;
+      }
+
+      // 5. جمع‌بندی نهایی (فقط یک خط مبلغ نهایی بعد از جدول)
+      // توجه: فوتر مودال لاگ قبلاً جمع نهایی را نشان می‌دهد، بنابراین اینجا نیازی به تکرار نیست.
+      // در صورت تمایل به نمایش دوباره، می‌توانید خط زیر را فعال کنید:
+      // const finalTotalHtml = `<div style="margin-top:8px;"><strong>💰 مبلغ نهایی قابل پرداخت: <span style="color:var(--success);">${formatMoney(data.finalTotal)}</span></strong></div>`;
+
+      return `
+    <div class="log-entry"> 
+     <div class="log-details">
+        ${periodsHtml}
+        ${ruleHtml}<br>
+        ${costInfo}<br>
+         ${extraHtml}
+        ${cafeTableHtml}
+      </div>
+    </div>
+  `;
+    }
+    case 'mode_change': {
+      return `
+    <div class="log-entry"> 
+     <div class="log-details">
+        <span class="log-info">⏱️ پس از <span class="log-highlight">${data.minutesSpent} دقیقه</span> از شروع بازی روی <span class="log-name">${escapeHtml(data.table)}</span> (<span class="log-console">${escapeHtml(data.consoleType)}</span>):</span><br>
+        <span class="log-change">تغییر از <span class="log-mode">${escapeHtml(data.oldMode)}</span> با نرخ ${formatMoneyWithColor(data.oldRate, 'rate')} در ساعت به <span class="log-mode">${escapeHtml(data.newMode)}</span> با نرخ ${formatMoneyWithColor(data.newRate, 'rate')} در ساعت (هزینه بازه قبل: ${formatMoneyWithColor(data.costOfPeriod, 'positive')})</span><br>
+        <span class="log-info">▶️ شروع بازه جدید با حالت <span class="log-mode">${escapeHtml(data.newMode)}</span> روی همان میز با نرخ ساعتی ${formatMoneyWithColor(data.newRate, 'rate')}</span>
+      </div>
+    </div>
+  `;
+    }
+    case 'table_change': {
+      return `
+    <div class="log-entry"> 
+      <div class="log-details">
+        <span class="log-info">⏱️ پس از <span class="log-highlight">${data.minutesSpent} دقیقه</span> از شروع بازی روی <span class="log-name">${escapeHtml(data.oldTable)}</span> با حالت <span class="log-mode">${escapeHtml(data.oldMode)}</span> با نرخ ساعتی ${formatMoneyWithColor(data.oldRate, 'rate')}:</span><br>
+        <span class="log-change">انتقال میز از <span class="log-name">${escapeHtml(data.oldTable)}</span> به <span class="log-name">${escapeHtml(data.newTable)}</span> (هزینه بازه قبل: ${formatMoneyWithColor(data.costOfPeriod, 'positive')})</span><br>
+        <span class="log-info">▶️ ادامه بازی روی میز <span class="log-name">${escapeHtml(data.newTable)}</span> با <span class="log-mode">${escapeHtml(data.newMode)}</span> با نرخ ساعتی ${formatMoneyWithColor(data.newRate, 'rate')}</span>
+      </div>
+    </div>
+  `;
+    }
+    case 'cafe_order': {
+      let tableHtml =
+        '<table style="width:100%; border-collapse:collapse; font-size:0.8rem; direction:rtl;">';
+      tableHtml +=
+        '<thead><tr style="border-bottom:1px solid var(--primary);">';
+      tableHtml += '<th style="text-align:right; padding:6px 4px;">آیتم</th>';
+      tableHtml += '<th style="text-align:center; padding:6px 4px;">تعداد</th>';
+      tableHtml +=
+        '<th style="text-align:left; padding:6px 4px;">قیمت واحد</th>';
+      tableHtml +=
+        '<th style="text-align:left; padding:6px 4px;">تغییر هزینه</th>';
+      tableHtml += '</td></thead><tbody>';
+      let totalChange = 0;
+      if (
+        data.changes &&
+        Array.isArray(data.changes) &&
+        data.changes.length > 0
+      ) {
+        data.changes.forEach((change) => {
+          const delta = change.delta;
+          const changeAmount = delta * change.price;
+          totalChange += changeAmount;
+          const sign = delta > 0 ? '+' : '';
+          const deltaColor = delta > 0 ? '#00ff66' : '#ff5555';
+          const displayDelta = `${sign}${Math.abs(delta)}`;
+          tableHtml += `<tr style="border-bottom:1px solid rgba(150,150,150,0.2);">`;
+          tableHtml += `<td style="text-align:right; padding:6px 4px;">${escapeHtml(change.name)}</td>`;
+          tableHtml += `<td style="text-align:center; padding:6px 4px;">(${change.oldQty} ← ${change.newQty})<span style="color:${deltaColor};"> ${displayDelta} </span> </td>`;
+          tableHtml += `<td style="text-align:left; padding:6px 4px;">${formatMoney(change.price)}</td>`;
+          tableHtml += `<td style="text-align:left; padding:6px 4px; color:${deltaColor};">${sign}${formatMoney(Math.abs(changeAmount))}</td>`;
+          tableHtml += `</tr>`;
+        });
+      } else {
+        tableHtml +=
+          '<tr><td colspan="4" style="text-align:center;">تغییری ثبت نشده<td></td>';
+      }
+      const totalSign = totalChange >= 0 ? '+' : '-';
+      const totalColor = totalChange >= 0 ? 'var(--success)' : 'var(--warning)';
+      tableHtml += `</tbody><tfoot><tr style="border-top:2px solid var(--primary);">`;
+      tableHtml += `<td colspan="3" style="text-align:left; font-weight:bold;">جمع کل تغییرات</td>`;
+      tableHtml += `<td style="text-align:left; font-weight:bold; color: ${totalColor};">${totalSign}${formatMoney(Math.abs(totalChange))}</td>`;
+      tableHtml += `</tr></tfoot></table>`;
+
+      return `
+    <div class="log-entry"> 
+      <div class="log-details">
+        ${tableHtml}
+      </div>
+    </div>
+  `;
+    }
+    case 'payment': {
+      return `
+    <div class="log-entry"> 
+      <div class="log-details">
+        <div style="margin-bottom: 4px;">مبلغ پرداختی: <span style="color: var(--success); font-weight: bold;">${formatMoney(data.amount)}</span></div>
+        <div>کل پیش‌پرداخت تاکنون: <span style="color: var(--success); font-weight: bold;">${formatMoney(data.totalPaidSoFar)}</span></div>
+      </div>
+    </div>
+  `;
+    }
+    case 'edit': {
+      const oldV = data.oldValues || {};
+      const newV = data.newValues || {};
+      const changesList = [];
+
+      if (oldV.timeStart !== undefined) {
+        changesList.push(
+          `⏱️ ساعت شروع: <span style="color: var(--warning);">${escapeHtml(oldV.timeStart)}</span> <span dir="ltr">←</span> <span style="color: var(--success);">${escapeHtml(newV.timeStart)}</span>`
+        );
+      }
+      if (oldV.timeEnd !== undefined) {
+        changesList.push(
+          `⏱️ ساعت پایان: <span style="color: var(--warning);">${escapeHtml(oldV.timeEnd)}</span> <span dir="ltr">←</span> <span style="color: var(--success);">${escapeHtml(newV.timeEnd)}</span>`
+        );
+      }
+      if (oldV.mode !== undefined) {
+        changesList.push(
+          `🎮 حالت بازی: <span style="color: var(--warning);">${escapeHtml(oldV.mode)}</span> <span dir="ltr">←</span> <span style="color: var(--success);">${escapeHtml(newV.mode)}</span>`
+        );
+      }
+      if (oldV.discountPercent !== undefined) {
+        changesList.push(
+          `🏷️ تخفیف درصدی: <span style="color: var(--warning);">${oldV.discountPercent}%</span> <span dir="ltr">←</span> <span style="color: var(--success);">${newV.discountPercent}%</span>`
+        );
+      }
+      if (oldV.discountFixed !== undefined) {
+        changesList.push(
+          `🏷️ تخفیف مبلغی: <span style="color: var(--warning);">${formatMoney(oldV.discountFixed)}</span> <span dir="ltr">←</span> <span style="color: var(--success);">${formatMoney(newV.discountFixed)}</span>`
+        );
+      }
+      if (oldV.extraPercent !== undefined) {
+        changesList.push(
+          `➕ هزینه اضافی درصدی: <span style="color: var(--warning);">${oldV.extraPercent}%</span> <span dir="ltr">←</span> <span style="color: var(--success);">${newV.extraPercent}%</span>`
+        );
+      }
+      if (oldV.extraFixed !== undefined) {
+        changesList.push(
+          `➕ هزینه اضافی مبلغی: <span style="color: var(--warning);">${formatMoney(oldV.extraFixed)}</span> <span dir="ltr">←</span> <span style="color: var(--success);">${formatMoney(newV.extraFixed)}</span>`
+        );
+      }
+      if (oldV.note !== undefined) {
+        const oldNote =
+          oldV.note.length > 50
+            ? oldV.note.substring(0, 50) + '...'
+            : oldV.note;
+        const newNote =
+          newV.note.length > 50
+            ? newV.note.substring(0, 50) + '...'
+            : newV.note;
+        changesList.push(
+          `📝 یادداشت: <span style="color: var(--warning);">"${escapeHtml(oldNote)}"</span> <span dir="ltr">←</span> <span style="color: var(--success);">"${escapeHtml(newNote)}"</span>`
+        );
+      }
+
+      const changesHtml =
+        changesList.length > 0
+          ? `<ul style="margin: 5px 0 0 20px; padding: 0; list-style: disc;">${changesList.map((item) => `<li>${item}</li>`).join('')}</ul>`
+          : '<div>تغییری ثبت نشده است.</div>';
+
+      return `
+    <div class="log-entry"> 
+      <div class="log-details">
+        ${changesHtml}
+      </div>
+    </div>
+  `;
+    }
+    case 'reservation': {
+      return `
+    <div class="log-entry"> 
+      <div class="log-details">
+        <div style="margin-bottom: 4px;">
+          میز <span style="color: var(--primary); font-weight: bold;">${escapeHtml(data.table)}</span> 
+          برای ساعت <span style="color: var(--text-muted);">${data.timeStart}</span> 
+          ${data.reservedDay ? `(روز ${escapeHtml(data.reservedDay)})` : ''}
+          ${data.date ? ` - تاریخ ${escapeHtml(data.date)}` : ''}
+        </div>
+        <div>
+          👤 <span style="color: var(--warning); font-weight: bold;">${escapeHtml(data.customerName)}</span>
+          ${data.customerPhone ? `  📞 ${escapeHtml(data.customerPhone)}` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+    }
+    case 'reservation_start': {
+      const rate =
+        data.pricingRate ||
+        getPricingRate(data.consoleType, data.mode, data.table);
+      return `
+    <div class="log-entry"> 
+     <div class="log-details">
+        <div>شروع بازی روی <span style="color: var(--primary); font-weight: bold;">${escapeHtml(data.table)}</span> با حالت <span style="color: var(--warning); font-weight: bold;">${escapeHtml(data.mode)}</span> (کنسول: ${escapeHtml(data.consoleType)})</div>
+        <div>نرخ ساعتی: <span style="color: var(--success); font-weight: bold;">${formatMoney(rate)}</span></div>
+        <div style="margin-top: 4px; color: var(--text-muted);">زمان شروع واقعی: ${data.actualStart}</div>
+      </div>
+    </div>
+  `;
+    }
+    case 'reactivate': {
+      const downTime = data.downTimeMinutes || 0;
+      const downText =
+        downTime > 0 ? `${downTime} دقیقه بعد از پایان جلسه` : 'بلافاصله';
+      return `
+    <div class="log-entry"> 
+    <div class="log-details">
+        <div>🕒 جلسه ${downText} دوباره فعال شد.</div>
+        <div>💰 هزینه بازی تا قبل از ادامه: <span style="color: var(--success); font-weight: bold;">${formatMoney(data.previousGameCost)}</span></div>
+        <div>☕ هزینه کافه تا قبل از ادامه: ${formatMoney(data.previousCafeCost)}</div>
+        <div style="margin-top: 5px;">▶️ ادامه روی میز <span style="color: var(--primary); font-weight: bold;">${escapeHtml(data.table)}</span> با حالت <span style="color: var(--warning); font-weight: bold;">${escapeHtml(data.mode)}</span> (کنسول: ${escapeHtml(data.consoleType)}) و نرخ ساعتی <span style="color: var(--success); font-weight: bold;">${formatMoney(data.pricingRate)}</span></div>
+      </div>
+    </div>
+  `;
+    }
+    default: {
+      return `
+        <div class="log-entry">
+          <div class="log-header"><span class="log-icon">${icon}</span> <span class="log-time">${timestamp}</span> <strong>${type}</strong></div>
+          <div class="log-details"><pre>${JSON.stringify(data, null, 2)}</pre></div>
+        </div>
+      `;
+    }
+  }
+}
 // ////////////////////////////////////
 // ////////////////////////////////////
 // ////////////////////////////////////

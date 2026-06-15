@@ -1551,6 +1551,10 @@ th {
 
 }
 
+.change-indicator.countdown-timer{
+margin-bottom: 5px;
+}
+
 /* اطمینان از عدم برش در سلول‌های جدول */
 #sessionsBody td {
     overflow: visible !important;
@@ -2530,6 +2534,70 @@ th {
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+.log-entry {
+  background: var(--input-bg);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-right: 3px solid var(--primary);
+}
+.log-header {
+  font-weight: bold;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.log-icon {
+  font-size: 1.2rem;
+}
+.log-details {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding-right: 20px;
+}
+.log-details ul, .log-details pre {
+  margin: 5px 0 0 0;
+}
+
+#sessionLogsModal th:nth-child(4),
+#sessionLogsModal th:nth-child(5),
+#sessionLogsModal td:nth-child(4),
+#sessionLogsModal td:nth-child(5) {
+  width: 130px;
+  min-width: 110px;
+  max-width: 160px;
+  white-space: normal;
+  word-break: break-word;
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 6px;
+}
+
+/* جلوگیری از چندخطی شدن عنوان هدر */
+#sessionLogsModal th:nth-child(4),
+#sessionLogsModal th:nth-child(5) {
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* تنظیم کلی جدول لاگ برای استفاده کامل از عرض */
+#sessionLogsModal table {
+  width: 100%;
+  table-layout: auto;
+}
+
+#toggleSystemPassword{
+    padding: 12px;
+    margin-bottom: 10px;
+}
+#trashTableBody td button{
+/* height: 42px; */
+margin-left: 10px;
+}
+#trashTableBody td   .btn.btn-log.btn-log-delete-modal{
+ }
 /* ====================================================== */
 /* ====================================================== */
 /* ====================================================== */

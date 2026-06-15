@@ -1,10 +1,14 @@
 const Session = require('./session.model');
 const CafeItem = require('../cafe/cafe.model');
 const Device = require('../device/device.model');
-const { calculateCost } = require('../../services/pricingService');
+const {
+  calculateCost,
+  getPricingRate,
+  getPeriodCost,
+  calculateCostWithDetails,
+} = require('../../services/pricingService');
 const { decreaseStock, increaseStock } = require('../cafe/cafe.service');
 const { getReserveTimestamp } = require('../../utils/helpers');
-
 // helper: دریافت تنظیمات گیم‌نت
 async function getGameNetSettings(gameNetId) {
   const GameNet = require('../gameNet/gameNet.model');
@@ -22,12 +26,24 @@ async function startSession(data, gameNetId) {
     startTimeMs: Date.now(),
   });
   // لاگ شروع
+  const rate = await getPricingRate(
+    data.consoleType,
+    data.mode,
+    data.table,
+    gameNetId
+  );
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'شروع بازی',
-    message: `شروع بازی روی ${data.table} با حالت ${data.mode}`,
-    gameCost: 0,
-    cafeCost: 0,
+    type: 'session_start',
+    timestamp: Date.now(),
+    data: {
+      table: data.table,
+      mode: data.mode,
+      consoleType: data.consoleType,
+      timeStart: data.timeStart,
+      pricingRate: rate,
+      gameCost: 0,
+      cafeCost: 0,
+    },
   });
   await session.save();
   return session;
@@ -44,11 +60,15 @@ async function reserveSession(data, gameNetId) {
   });
 
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'رزرو',
-    message: `رزرو میز ${data.table} برای ${data.customerName} ساعت ${data.timeStart}`,
-    gameCost: 0,
-    cafeCost: 0,
+    type: 'reservation',
+    timestamp: Date.now(),
+    data: {
+      table: data.table,
+      timeStart: data.timeStart,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      reservedDay: data.reservedDay,
+    },
   });
   await session.save();
   return session;
@@ -59,19 +79,35 @@ async function startReservedSession(sessionId, gameNetId) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'reserved')
     throw new Error('Invalid reservation');
+
+  // ذخیره مقادیر مورد نیاز برای لاگ (قبل از تغییر)
+  const table = session.table;
+  const mode = session.mode;
+  const consoleType = session.consoleType;
+
+  // تبدیل وضعیت به active
   session.status = 'active';
   session.startTimeMs = Date.now();
-  session.timeStart = new Date().toLocaleTimeString('fa-IR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const now = new Date();
+  const actualStart = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  session.timeStart = actualStart;
+
+  // محاسبه نرخ ساعتی
+  const rate = await getPricingRate(consoleType, mode, table, gameNetId);
+
+  // ثبت لاگ (فقط ۵ فیلد)
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'شروع بازی',
-    message: `شروع جلسه از حالت رزرو`,
-    gameCost: 0,
-    cafeCost: session.cafeCost,
+    type: 'reservation_start',
+    timestamp: Date.now(),
+    data: {
+      table,
+      mode,
+      consoleType,
+      actualStart,
+      pricingRate: rate,
+    },
   });
+
   await session.save();
   return session;
 }
@@ -81,6 +117,7 @@ async function closeSession(sessionId, gameNetId, endTimeStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'active')
     throw new Error('Session not active');
+
   const settings = await getGameNetSettings(gameNetId);
   const {
     gameCost,
@@ -88,20 +125,21 @@ async function closeSession(sessionId, gameNetId, endTimeStr) {
     effectiveMinutes,
     weightedAvgRate,
     hasChanges,
-  } = await calculateCost(session, endTimeStr, settings);
-  session.timeEnd = endTimeStr;
-  const safeGameCost = isNaN(gameCost) ? 0 : gameCost;
-  session.gameCost = safeGameCost;
-  let subtotal = gameCost + session.cafeCost - session.paidAmount;
+    periodsDetails,
+  } = await calculateCostWithDetails(session, endTimeStr, settings);
 
-  // هزینه اضافی (جریمه/اضافه)
+  session.timeEnd = endTimeStr;
+  session.gameCost = gameCost;
+
   let extraAmount = 0;
   if (session.extraFixed > 0) extraAmount = session.extraFixed;
   else if (session.extraPercent > 0)
-    extraAmount = Math.round((subtotal * session.extraPercent) / 100);
-  let afterExtra = subtotal + extraAmount;
+    extraAmount = Math.round(
+      ((gameCost + session.cafeCost) * session.extraPercent) / 100
+    );
 
-  // تخفیف (بعد از اضافه شدن هزینه اضافی)
+  let afterExtra =
+    gameCost + session.cafeCost - session.paidAmount + extraAmount;
   let discountAmount = 0;
   if (session.discountFixed > 0) discountAmount = session.discountFixed;
   else if (session.discountPercent > 0)
@@ -110,109 +148,220 @@ async function closeSession(sessionId, gameNetId, endTimeStr) {
 
   session.totalAmount = finalTotal;
   session.status = 'closed';
-  // لاگ بستن با جزئیات بازه‌ها (برای سادگی می‌توان پیام HTML ذخیره کرد)
+
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'بستن جلسه',
-    message: `جلسه بسته شد. زمان کل: ${totalMinutes} دقیقه، هزینه بازی: ${gameCost}، هزینه کافه: ${session.cafeCost}، هزینه اضافی: ${extraAmount}، تخفیف: ${discountAmount}، قابل پرداخت: ${finalTotal}`,
-    gameCost,
-    cafeCost: session.cafeCost,
+    type: 'session_close',
+    timestamp: Date.now(),
+    data: {
+      endTime: endTimeStr,
+      totalMinutes,
+      effectiveMinutes,
+      weightedAvgRate,
+      hasChanges,
+      periodsDetails,
+      gameCost,
+      cafeCost: session.cafeCost,
+      paidAmount: session.paidAmount,
+      extraAmount,
+      discountAmount,
+      extraPercent: session.extraPercent,
+      extraFixed: session.extraFixed,
+      finalTotal,
+      cafeItems: session.cafeItems,
+      useMinimumHour: settings.useMinimumHour,
+    },
   });
-  await session.save();
-  // کاهش موجودی کافه (در تراکنش باید انجام شود، فعلاً ساده)
+
   for (let item of session.cafeItems) {
     await decreaseStock(item.id, item.qty, gameNetId);
   }
+
+  await session.save();
   return session;
 }
 
 // تغییر دسته (در جلسه فعال)
+
 async function changeMode(sessionId, gameNetId, newMode, nowStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'active')
     throw new Error('Session not active');
+
+  // محاسبه آخرین بازه (از زمان شروع یا آخرین تغییر تا لحظه حال)
   const lastStart =
     session.history.length > 0
       ? session.history[session.history.length - 1].end
       : session.timeStart;
-  // ثبت بازه قبلی
+  const {
+    minutes,
+    rate: oldRate,
+    cost,
+  } = await getPeriodCost(
+    lastStart,
+    nowStr,
+    session.mode,
+    session.consoleType,
+    session.table,
+    gameNetId,
+    getPricingRate
+  );
+
+  const oldMode = session.mode;
+
+  // ثبت تاریخچه
   session.history.push({
     start: lastStart,
     end: nowStr,
-    mode: session.mode,
+    mode: oldMode,
     consoleType: session.consoleType,
     table: session.table,
-    action: `تغییر دسته از ${session.mode} به ${newMode}`,
+    action: `تغییر دسته از ${oldMode} به ${newMode}`,
   });
-  // تغییر mode فعلی
-  const oldMode = session.mode;
+
+  // به‌روزرسانی جلسه
   session.mode = newMode;
-  // لاگ
+  session.gameCost = (session.gameCost || 0) + cost;
+
+  const newRate = await getPricingRate(
+    session.consoleType,
+    newMode,
+    session.table,
+    gameNetId
+  );
+
+  // ذخیره لاگ با اطلاعات کامل
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'تغییر دسته',
-    message: `تغییر دسته از ${oldMode} به ${newMode} در ساعت ${nowStr}`,
-    gameCost: 0,
-    cafeCost: session.cafeCost,
+    type: 'mode_change',
+    timestamp: Date.now(),
+    data: {
+      oldMode,
+      newMode,
+      changeTime: nowStr,
+      table: session.table,
+      consoleType: session.consoleType,
+      oldRate,
+      newRate,
+      minutesSpent: minutes, // مدت زمان بازه قبلی
+      costOfPeriod: cost, // هزینه بازه قبلی
+      gameCost: session.gameCost,
+      cafeCost: session.cafeCost,
+    },
   });
+
   await session.save();
   return session;
 }
 
 // انتقال میز
+
 async function changeTable(sessionId, gameNetId, newTable, newMode, nowStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'active')
     throw new Error('Session not active');
+
+  // محاسبه آخرین بازه (از زمان شروع یا آخرین تغییر تا لحظه حال)
   const lastStart =
     session.history.length > 0
       ? session.history[session.history.length - 1].end
       : session.timeStart;
+
+  const {
+    minutes,
+    rate: oldRate,
+    cost,
+  } = await getPeriodCost(
+    lastStart,
+    nowStr,
+    session.mode,
+    session.consoleType,
+    session.table,
+    gameNetId,
+    getPricingRate
+  );
+
+  const oldTable = session.table;
+  const oldMode = session.mode;
+  const oldConsole = session.consoleType;
+
+  // ثبت تاریخچه
   session.history.push({
     start: lastStart,
     end: nowStr,
-    mode: session.mode,
-    consoleType: session.consoleType,
-    table: session.table,
-    action: `انتقال میز از ${session.table} به ${newTable}`,
+    mode: oldMode,
+    consoleType: oldConsole,
+    table: oldTable,
+    action: `انتقال میز از ${oldTable} به ${newTable}`,
   });
-  const oldTable = session.table;
+
+  // اعمال تغییرات
   session.table = newTable;
-  if (newMode && newMode !== session.mode) {
+  if (newMode && newMode !== oldMode) {
     session.mode = newMode;
   }
   // به‌روزرسانی consoleType از دستگاه جدید
   const device = await Device.findOne({ gameNetId, name: newTable });
   if (device) session.consoleType = device.console;
+
+  // به‌روزرسانی هزینه بازی
+  session.gameCost = (session.gameCost || 0) + cost;
+
+  // محاسبه نرخ ساعتی میز جدید برای حالت جدید (یا همان حالت قدیم)
+  const newRate = await getPricingRate(
+    session.consoleType,
+    session.mode,
+    newTable,
+    gameNetId
+  );
+
+  // ذخیره لاگ با اطلاعات کامل
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'انتقال میز',
-    message: `انتقال میز از ${oldTable} به ${newTable}${newMode ? ` و تغییر دسته به ${newMode}` : ''} در ساعت ${nowStr}`,
-    gameCost: 0,
-    cafeCost: session.cafeCost,
+    type: 'table_change',
+    timestamp: Date.now(),
+    data: {
+      oldTable,
+      newTable,
+      oldMode,
+      newMode: session.mode,
+      changeTime: nowStr,
+      consoleType: session.consoleType,
+      oldRate,
+      newRate,
+      minutesSpent: minutes,
+      costOfPeriod: cost,
+      gameCost: session.gameCost,
+      cafeCost: session.cafeCost,
+    },
   });
+
   await session.save();
   return session;
 }
-
 // افزودن سفارش کافه به جلسه فعال یا بسته شده (با لاگ و به‌روزرسانی موجودی)
 async function addCafeOrder(sessionId, gameNetId, items) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session) throw new Error('Session not found');
-  // items: آرایه‌ای از { id, qty }
-  let changes = [];
+
+  let changes = []; // آرایه تغییرات
   let newCafeCost = session.cafeCost;
+
   for (let item of items) {
     const cafeItem = await CafeItem.findOne({ _id: item.id, gameNetId });
     if (!cafeItem) throw new Error(`Cafe item ${item.id} not found`);
+
     const existing = session.cafeItems.find((i) => i.id.toString() === item.id);
     const oldQty = existing ? existing.qty : 0;
     const delta = item.qty - oldQty;
+
     if (delta !== 0) {
+      // بررسی موجودی
       if (delta > 0 && delta > cafeItem.stock)
         throw new Error(`موجودی ${cafeItem.name} کافی نیست`);
+
+      // به‌روزرسانی موجودی (با فرض وجود decreaseStock و increaseStock)
       if (delta > 0) await decreaseStock(item.id, delta, gameNetId);
       else if (delta < 0) await increaseStock(item.id, -delta, gameNetId);
+
+      // به‌روزرسانی cafeItems در session
       if (existing) existing.qty = item.qty;
       else
         session.cafeItems.push({
@@ -221,19 +370,34 @@ async function addCafeOrder(sessionId, gameNetId, items) {
           price: cafeItem.price,
           qty: item.qty,
         });
+
       newCafeCost += delta * cafeItem.price;
-      changes.push(`${cafeItem.name}: ${oldQty} → ${item.qty}`);
+
+      changes.push({
+        name: cafeItem.name,
+        oldQty: oldQty,
+        newQty: item.qty,
+        delta: delta,
+        price: cafeItem.price,
+        totalChange: delta * cafeItem.price,
+      });
     }
   }
+
   session.cafeCost = newCafeCost;
-  // لاگ
+
+  // ثبت لاگ ساختاریافته
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'تغییر سفارش کافه',
-    message: `سفارش کافه: ${changes.join(', ')}`,
-    gameCost: 0,
-    cafeCost: newCafeCost,
+    type: 'cafe_order',
+    timestamp: Date.now(),
+    data: {
+      changes: changes,
+      newCafeCost: newCafeCost,
+      gameCost: session.gameCost,
+      cafeCost: newCafeCost,
+    },
   });
+
   await session.save();
   return session;
 }
@@ -244,11 +408,13 @@ async function addPayment(sessionId, gameNetId, amount) {
   if (!session) throw new Error('Session not found');
   session.paidAmount += amount;
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'پرداخت',
-    message: `پرداخت مبلغ ${amount} تومان`,
-    gameCost: 0,
-    cafeCost: session.cafeCost,
+    type: 'payment',
+    timestamp: Date.now(),
+    data: {
+      amount,
+      totalPaidSoFar: session.paidAmount,
+      gameCost: session.gameCost,
+    },
   });
   await session.save();
   return session;
@@ -258,22 +424,73 @@ async function addPayment(sessionId, gameNetId, amount) {
 async function editSession(sessionId, gameNetId, updates, nowStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session) throw new Error('Session not found');
-  const oldSession = JSON.parse(JSON.stringify(session));
-  // اعمال تغییرات
-  if (updates.timeStart) session.timeStart = updates.timeStart;
-  if (updates.timeEnd && session.status === 'closed')
+
+  // ذخیره مقادیر قدیمی فقط برای فیلدهایی که قرار است تغییر کنند
+  const oldValues = {};
+  const newValues = {};
+
+  if (
+    updates.timeStart !== undefined &&
+    updates.timeStart !== session.timeStart
+  ) {
+    oldValues.timeStart = session.timeStart;
+    newValues.timeStart = updates.timeStart;
+    session.timeStart = updates.timeStart;
+  }
+  if (
+    updates.timeEnd !== undefined &&
+    updates.timeEnd !== session.timeEnd &&
+    session.status === 'closed'
+  ) {
+    oldValues.timeEnd = session.timeEnd;
+    newValues.timeEnd = updates.timeEnd;
     session.timeEnd = updates.timeEnd;
-  if (updates.mode) session.mode = updates.mode;
-  if (updates.discountPercent !== undefined)
+  }
+  if (updates.mode !== undefined && updates.mode !== session.mode) {
+    oldValues.mode = session.mode;
+    newValues.mode = updates.mode;
+    session.mode = updates.mode;
+  }
+  if (
+    updates.discountPercent !== undefined &&
+    updates.discountPercent !== session.discountPercent
+  ) {
+    oldValues.discountPercent = session.discountPercent;
+    newValues.discountPercent = updates.discountPercent;
     session.discountPercent = updates.discountPercent;
-  if (updates.discountFixed !== undefined)
+  }
+  if (
+    updates.discountFixed !== undefined &&
+    updates.discountFixed !== session.discountFixed
+  ) {
+    oldValues.discountFixed = session.discountFixed;
+    newValues.discountFixed = updates.discountFixed;
     session.discountFixed = updates.discountFixed;
-  if (updates.note !== undefined) session.note = updates.note;
-  if (updates.extraPercent !== undefined)
+  }
+  if (
+    updates.extraPercent !== undefined &&
+    updates.extraPercent !== session.extraPercent
+  ) {
+    oldValues.extraPercent = session.extraPercent;
+    newValues.extraPercent = updates.extraPercent;
     session.extraPercent = updates.extraPercent;
-  if (updates.extraFixed !== undefined) session.extraFixed = updates.extraFixed;
-  // اگر جلسه بسته است، هزینه را دوباره محاسبه کن
-  if (session.status === 'closed') {
+  }
+  if (
+    updates.extraFixed !== undefined &&
+    updates.extraFixed !== session.extraFixed
+  ) {
+    oldValues.extraFixed = session.extraFixed;
+    newValues.extraFixed = updates.extraFixed;
+    session.extraFixed = updates.extraFixed;
+  }
+  if (updates.note !== undefined && updates.note !== session.note) {
+    oldValues.note = session.note || '';
+    newValues.note = updates.note;
+    session.note = updates.note;
+  }
+
+  // اگر جلسه بسته است و زمان پایان تغییر کرده، هزینه را دوباره محاسبه کن (اختیاری)
+  if (session.status === 'closed' && (updates.timeEnd || updates.mode)) {
     const settings = await getGameNetSettings(gameNetId);
     const { gameCost } = await calculateCost(
       session,
@@ -290,15 +507,25 @@ async function editSession(sessionId, gameNetId, updates, nowStr) {
           : 0;
     session.totalAmount = Math.max(0, subtotal - discountAmount);
   }
-  // لاگ ویرایش
-  session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'ویرایش رکورد',
-    message: `ویرایش اطلاعات: ${Object.keys(updates).join(', ')}`,
-    gameCost: session.gameCost || 0,
-    cafeCost: session.cafeCost,
-  });
+
   await session.save();
+
+  // تنها در صورتی لاگ ثبت کن که تغییری رخ داده باشد
+  if (Object.keys(oldValues).length > 0) {
+    session.logs.push({
+      type: 'edit',
+      timestamp: Date.now(),
+      data: {
+        oldValues,
+        newValues,
+        editTime: nowStr,
+        gameCost: session.gameCost,
+        cafeCost: session.cafeCost,
+      },
+    });
+    await session.save();
+  }
+
   return session;
 }
 
@@ -330,40 +557,75 @@ async function getSessionsByDay(gameNetId, day, date) {
   return Session.find({ gameNetId, date }).sort({ createdAt: -1 });
 }
 
-const reactivateSession = async (sessionId, gameNetId) => {
+async function reactivateSession(sessionId, gameNetId) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session) throw new Error('Session not found');
   if (session.status !== 'closed')
     throw new Error('Only closed sessions can be reactivated');
 
-  const activeExists = await Session.findOne({
-    gameNetId,
-    table: session.table,
-    status: 'active',
-    date: session.date,
-  });
-
-  if (activeExists) {
-    throw new Error(`میز هم‌اکنون فعال است. ابتدا جلسه فعال را ببندید.`);
+  // محاسبه مدت زمان بسته بودن جلسه (برای لاگ)
+  let downTimeMinutes = 0;
+  if (session.timeEnd) {
+    const now = new Date();
+    const [endHour, endMin] = session.timeEnd.split(':').map(Number);
+    const endDate = new Date();
+    endDate.setHours(endHour, endMin, 0, 0);
+    if (endDate > now) endDate.setDate(endDate.getDate() - 1);
+    downTimeMinutes = Math.round((now - endDate) / (1000 * 60));
+    if (downTimeMinutes < 0) downTimeMinutes = 0;
   }
 
+  const previousGameCost = session.gameCost || 0;
+  const previousCafeCost = session.cafeCost || 0;
+
+  // ========== اضافه کردن بازه قبلی به تاریخچه ==========
+  if (session.timeStart && session.timeEnd) {
+    session.history.push({
+      start: session.timeStart,
+      end: session.timeEnd,
+      mode: session.mode,
+      consoleType: session.consoleType,
+      table: session.table,
+      action: `بازی از ${session.timeStart} تا ${session.timeEnd}`,
+    });
+  }
+  // =================================================
+
+  // تنظیم مجدد جلسه برای ادامه
+  session.status = 'active';
   const now = new Date();
   const newTimeStart = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-  session.status = 'active';
   session.timeStart = newTimeStart;
   session.timeEnd = null;
   session.startTimeMs = Date.now();
+
+  // محاسبه نرخ ساعتی برای لاگ
+  const rate = await getPricingRate(
+    session.consoleType,
+    session.mode,
+    session.table,
+    gameNetId
+  );
+
   session.logs.push({
-    timestamp: new Date().toLocaleTimeString('fa-IR'),
-    eventType: 'ادامه جلسه',
-    message: `جلسه بسته شده در ${session.timeEnd} دوباره فعال شد.`,
-    gameCost: 0,
-    cafeCost: session.cafeCost || 0,
+    type: 'reactivate',
+    timestamp: Date.now(),
+    data: {
+      downTimeMinutes,
+      previousGameCost,
+      previousCafeCost,
+      newStartTime: newTimeStart,
+      table: session.table,
+      mode: session.mode,
+      consoleType: session.consoleType,
+      pricingRate: rate,
+    },
   });
+
   await session.save();
   return session;
-};
+}
+
 module.exports = {
   startSession,
   reserveSession,
