@@ -1,12 +1,12 @@
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const morgan = require("morgan");
-const path = require("path");
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const path = require('path');
 
-const errorHandler = require("./middlewares/errorHandler");
-const updateLastActivity = require("./middlewares/updateLastActivity");
-const { auth } = require("./middlewares/auth");
+const errorHandler = require('./middlewares/errorHandler');
+const updateLastActivity = require('./middlewares/updateLastActivity');
+const { auth } = require('./middlewares/auth');
 
 const app = express();
 
@@ -14,63 +14,64 @@ const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json());
-app.use(morgan("dev"));
+app.use(morgan('dev'));
 
 // Static files (frontend)
-app.use(express.static(path.join(__dirname, "../public")));
+app.use(express.static(path.join(__dirname, '../public')));
 
-// Routes (بعداً اضافه می‌شوند)
 // مسیرهای عمومی (بدون احراز هویت)
-app.use("/api/v1/auth", require("./modules/auth/auth.routes"));
+app.use('/api/v1/auth', require('./modules/auth/auth.routes'));
 
 // مسیرهای محافظت شده (با احراز هویت + به‌روزرسانی lastActivity)
 app.use(
-  "/api/v1/users",
+  '/api/v1/users',
   auth,
   updateLastActivity,
-  require("./modules/user/user.routes"),
+  require('./modules/user/user.routes')
 );
 app.use(
-  "/api/v1/gameNets",
+  '/api/v1/gameNets',
   auth,
   updateLastActivity,
-  require("./modules/gameNet/gameNet.routes"),
+  require('./modules/gameNet/gameNet.routes')
 );
 app.use(
-  "/api/v1/devices",
+  '/api/v1/devices',
   auth,
   updateLastActivity,
-  require("./modules/device/device.routes"),
+  require('./modules/device/device.routes')
 );
 app.use(
-  "/api/v1/cafe",
+  '/api/v1/cafe',
   auth,
   updateLastActivity,
-  require("./modules/cafe/cafe.routes"),
+  require('./modules/cafe/cafe.routes')
 );
 app.use(
-  "/api/v1/sessions",
+  '/api/v1/sessions',
   auth,
   updateLastActivity,
-  require("./modules/session/session.routes"),
+  require('./modules/session/session.routes')
 );
 app.use(
-  "/api/v1/reports",
+  '/api/v1/reports',
   auth,
   updateLastActivity,
-  require("./modules/report/report.routes"),
+  require('./modules/report/report.routes')
 );
 app.use(
-  "/api/v1/deleted",
+  '/api/v1/deleted',
   auth,
   updateLastActivity,
-  require("./modules/deletedSession/deletedSession.routes"),
+  require('./modules/deletedSession/deletedSession.routes')
 );
-// سایر ماژول‌ها بعداً اضافه می‌شوند
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next({ status: 404, message: 'API endpoint not found' });
+  }
+  res.status(404).sendFile(path.join(__dirname, '../public/404.html'));
 });
 
 // Global error handler

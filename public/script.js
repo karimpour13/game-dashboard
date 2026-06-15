@@ -26,6 +26,17 @@ let userRole = null; // 'admin' یا 'superAdmin'
 let currentGameNetId = null; // برای سوپرادمین انتخاب شده
 //console.log(typeof NiceSelect);
 // Helper: درخواست fetch با توکن
+let isRefreshing = false;
+let failedQueue = [];
+
+function processQueue(error, token = null) {
+  failedQueue.forEach((prom) => {
+    if (error) prom.reject(error);
+    else prom.resolve(token);
+  });
+  failedQueue = [];
+}
+
 async function apiFetch(url, options = {}) {
   const token = localStorage.getItem('accessToken');
   const headers = {
@@ -35,17 +46,63 @@ async function apiFetch(url, options = {}) {
   if (token && !options.noAuth) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  const response = await fetch(url, { ...options, headers });
-  if (!response.ok) {
-    let errorMessage = response.statusText;
-    try {
-      const errorJson = await response.json();
-      errorMessage = errorJson.message || errorMessage;
-    } catch (e) {}
-    throw new Error(errorMessage);
-  }
-  if (response.status === 204) return null;
-  return response.json();
+
+  const makeRequest = async (customToken) => {
+    if (customToken) headers['Authorization'] = `Bearer ${customToken}`;
+    const response = await fetch(url, { ...options, headers });
+    if (response.status === 401 && !options._retry) {
+      // تلاش برای رفرش توکن
+      if (isRefreshing) {
+        // اگر در حال رفرش هستیم، درخواست را در صف قرار بده
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then((newToken) => {
+          return apiFetch(url, { ...options, _retry: true });
+        });
+      }
+      isRefreshing = true;
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) throw new Error('No refresh token');
+        const refreshRes = await fetch('/api/v1/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (!refreshRes.ok) throw new Error('Refresh failed');
+        const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
+          await refreshRes.json();
+        localStorage.setItem('accessToken', newAccessToken);
+        localStorage.setItem('refreshToken', newRefreshToken);
+        processQueue(null, newAccessToken);
+        // درخواست اصلی را با توکن جدید تکرار کن
+        return apiFetch(url, { ...options, _retry: true });
+      } catch (err) {
+        processQueue(err, null);
+        // رفرش ناموفق: پاک کردن توکن‌ها و رفتن به لاگین
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('appScreen').style.display = 'none';
+        throw new Error('Session expired. Please login again.');
+      } finally {
+        isRefreshing = false;
+      }
+    }
+    if (!response.ok) {
+      let errorMessage = response.statusText;
+      try {
+        const errorJson = await response.json();
+        errorMessage = errorJson.message || errorMessage;
+      } catch (e) {}
+      throw new Error(errorMessage);
+    }
+    if (response.status === 204) return null;
+    return response.json();
+  };
+
+  return makeRequest();
 }
 function debounce(func, delay) {
   let timeoutId;
@@ -687,16 +744,106 @@ async function logout() {
   if (timerInterval) clearInterval(timerInterval);
 }
 
+// async function checkAuthOnLoad() {
+//   const token = localStorage.getItem('accessToken');
+//   if (!token) {
+//     // نمایش صفحه لاگین
+//     document.getElementById('loginScreen').style.display = 'flex';
+//     document.getElementById('appScreen').style.display = 'none';
+//     return;
+//   }
+//   try {
+//     const data = await apiFetch('/api/v1/auth/me');
+//     // ذخیره اطلاعات کاربر
+//     const userForStorage = {
+//       ...data.user,
+//       gameNetId: data.user.gameNetId?._id || data.user.gameNetId,
+//     };
+//     localStorage.setItem('user', JSON.stringify(userForStorage));
+//     userRole = data.user.role;
+//     if (userRole === 'admin') {
+//       currentGameNetId = data.user.gameNetId;
+//     } else {
+//       // برای سوپرادمین، currentGameNetId را بعداً از سلکت می‌گیریم
+//       currentGameNetId = null;
+//     }
+//     // مخفی کردن لاگین و نمایش اپ
+//     document.getElementById('loginScreen').style.display = 'none';
+//     document.getElementById('appScreen').style.display = 'block';
+//     // مقداردهی سلکت گیم‌نت (برای سوپرادمین)
+//     if (userRole === 'superAdmin') {
+//       await populateGameNetSelect();
+//       // اگر گیم‌نتی انتخاب نشده، اولین گیم‌نت را انتخاب کن
+//       const select = document.getElementById('gameNetSelect');
+//       if (select && !select.value) {
+//         if (select.options.length > 1) {
+//           select.value = select.options[1].value;
+//           currentGameNetId = select.value;
+//         } else {
+//           // بدون گیم‌نت – خطا
+//           throw new Error('هیچ گیم‌نتی موجود نیست');
+//         }
+//       } else if (select) {
+//         currentGameNetId = select.value;
+//       }
+//     }
+//     // بارگذاری داده‌ها
+//     await initSystem();
+//   } catch (err) {
+//     console.error(err);
+//     localStorage.removeItem('accessToken');
+//     localStorage.removeItem('refreshToken');
+//     localStorage.removeItem('user');
+//     // نمایش صفحه لاگین در صورت خطا
+//     document.getElementById('loginScreen').style.display = 'flex';
+//     document.getElementById('appScreen').style.display = 'none';
+//   }
+// }
 async function checkAuthOnLoad() {
   const token = localStorage.getItem('accessToken');
-  if (!token) {
-    // نمایش صفحه لاگین
+  const refreshToken = localStorage.getItem('refreshToken');
+
+  // اگر اصلاً توکنی وجود ندارد، لاگین را نشان بده
+  if (!token && !refreshToken) {
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appScreen').style.display = 'none';
     return;
   }
+
+  // تابع کمکی برای گرفتن توکن جدید با رفرش
+  const refreshAccessToken = async () => {
+    if (!refreshToken) throw new Error('No refresh token');
+    const res = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) throw new Error('Refresh failed');
+    const { accessToken, refreshToken: newRefreshToken } = await res.json();
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', newRefreshToken);
+    return accessToken;
+  };
+
+  // تابع کمکی برای احراز هویت (با امکان رفرش خودکار)
+  const authenticate = async (retry = true) => {
+    try {
+      return await apiFetch('/api/v1/auth/me');
+    } catch (err) {
+      const isUnauthorized =
+        err.message.includes('401') ||
+        err.message.includes('Invalid token') ||
+        err.message.includes('Unauthorized');
+      if (retry && isUnauthorized) {
+        await refreshAccessToken();
+        return await authenticate(false);
+      }
+      throw err;
+    }
+  };
+
   try {
-    const data = await apiFetch('/api/v1/auth/me');
+    const data = await authenticate();
     // ذخیره اطلاعات کاربر
     const userForStorage = {
       ...data.user,
@@ -707,7 +854,6 @@ async function checkAuthOnLoad() {
     if (userRole === 'admin') {
       currentGameNetId = data.user.gameNetId;
     } else {
-      // برای سوپرادمین، currentGameNetId را بعداً از سلکت می‌گیریم
       currentGameNetId = null;
     }
     // مخفی کردن لاگین و نمایش اپ
@@ -716,28 +862,24 @@ async function checkAuthOnLoad() {
     // مقداردهی سلکت گیم‌نت (برای سوپرادمین)
     if (userRole === 'superAdmin') {
       await populateGameNetSelect();
-      // اگر گیم‌نتی انتخاب نشده، اولین گیم‌نت را انتخاب کن
       const select = document.getElementById('gameNetSelect');
       if (select && !select.value) {
         if (select.options.length > 1) {
           select.value = select.options[1].value;
           currentGameNetId = select.value;
         } else {
-          // بدون گیم‌نت – خطا
           throw new Error('هیچ گیم‌نتی موجود نیست');
         }
       } else if (select) {
         currentGameNetId = select.value;
       }
     }
-    // بارگذاری داده‌ها
     await initSystem();
   } catch (err) {
     console.error(err);
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
-    // نمایش صفحه لاگین در صورت خطا
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appScreen').style.display = 'none';
   }
