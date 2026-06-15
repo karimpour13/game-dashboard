@@ -729,6 +729,7 @@
         </div>
 
         <!-- بخش تخفیف جدید -->
+        <!-- بخش تخفیف -->
         <div id="discountSection" style="margin-bottom: 20px">
           <label style="color: var(--primary)"
             >🏷️ تخفیف (یکی از دو گزینه)</label
@@ -740,13 +741,11 @@
             <div class="input-group">
               <label>درصد تخفیف (%)</label>
               <input
-                type="number"
+                type="text"
                 id="editDiscountPercent"
-                min="0"
-                max="100"
-                step="1"
-                value="0"
+                class="number-only"
                 style="text-align: center"
+                placeholder="مثلاً 10"
               />
             </div>
             <div class="input-group">
@@ -754,8 +753,9 @@
               <input
                 type="text"
                 id="editDiscountFixed"
+                class="money-input"
                 style="text-align: left"
-                oninput="liveNumberFormat(this)"
+                placeholder="مثلاً 5,000"
               />
             </div>
           </div>
@@ -763,6 +763,8 @@
             >تخفیف مبلغی به صورت مستقیم از کل هزینه نهایی کسر می‌شود.</small
           >
         </div>
+
+        <!-- بخش هزینه اضافی -->
         <div id="extraChargeSection" style="margin-bottom: 20px">
           <label style="color: var(--warning)"
             >➕ هزینه اضافی (جریمه / خدمات ویژه)</label
@@ -774,13 +776,11 @@
             <div class="input-group">
               <label>درصد اضافی (%)</label>
               <input
-                type="number"
+                type="text"
                 id="editExtraPercent"
-                min="0"
-                max="100"
-                step="1"
-                value="0"
+                class="number-only"
                 style="text-align: center"
+                placeholder="مثلاً 5"
               />
             </div>
             <div class="input-group">
@@ -788,8 +788,9 @@
               <input
                 type="text"
                 id="editExtraFixed"
+                class="money-input"
                 style="text-align: left"
-                oninput="liveNumberFormat(this)"
+                placeholder="مثلاً 20,000"
               />
             </div>
           </div>
@@ -939,8 +940,8 @@
       <div
         class="modal-content"
         style="
-          width: 85vw;
-          max-width: 1200px;
+          width: 95vw;
+          max-width: 1500px;
           height: 85vh;
           display: flex;
           flex-direction: column;

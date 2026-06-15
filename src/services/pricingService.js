@@ -47,7 +47,8 @@ async function getPricingRate(consoleType, mode, tableName, gameNetId) {
 // محاسبه هزینه کل جلسه (با در نظر گرفتن history و حالت فعلی)
 // useMinimumHour و useRoundDownPrice از تنظیمات گیم‌نت گرفته می‌شود
 async function calculateCost(session, endTimeStr, gameNetSettings) {
-  const { useMinimumHour, useRoundDownPrice, priceUnit } = gameNetSettings;
+  const { useMinimumHour, useRoundDownPrice, useRoundUpPrice, priceUnit } =
+    gameNetSettings;
   const periods = [];
   if (session.history && session.history.length > 0) {
     for (let h of session.history) periods.push(h);
@@ -103,20 +104,25 @@ async function calculateCost(session, endTimeStr, gameNetSettings) {
     (effectiveMinutes / 60) * (totalWeightedRate / totalMinutes)
   );
   if (isNaN(gameCost)) gameCost = 0;
+  console.log('gameCost step 1', gameCost);
 
   // گرد کردن بر اساس تنظیمات
-  const roundBase = priceUnit === 'Rial' ? 50000 : 5000;
+  const roundBase = 5000;
 
-  if (gameNetSettings.useRoundUpPrice) {
+  if (useRoundUpPrice) {
     gameCost = Math.ceil(gameCost / roundBase) * roundBase;
-  } else if (gameNetSettings.useRoundDownPrice) {
+  } else if (useRoundDownPrice) {
     gameCost = Math.floor(gameCost / roundBase) * roundBase;
   } else {
     // حالت پیش‌فرض: بدون گرد کردن یا گرد به پایین هزار تومانی (اختیاری)
-    const defaultBase = priceUnit === 'Rial' ? 10000 : 1000;
+    const defaultBase = 1000;
     gameCost = Math.floor(gameCost / defaultBase) * defaultBase;
+    console.log(
+      'gameCost step 2 if',
+      Math.floor(gameCost / defaultBase) * defaultBase
+    );
   }
-
+  console.log('gameCost step 3', gameCost);
   if (isNaN(gameCost)) gameCost = 0;
 
   return {
@@ -127,5 +133,112 @@ async function calculateCost(session, endTimeStr, gameNetSettings) {
     hasChanges,
   };
 }
+async function calculateCostWithDetails(session, endTimeStr, gameNetSettings) {
+  const { useMinimumHour, useRoundDownPrice, useRoundUpPrice, priceUnit } =
+    gameNetSettings;
+  const periods = [];
+  if (session.history && session.history.length > 0) {
+    for (let h of session.history) periods.push(h);
+    periods.push({
+      start: session.history[session.history.length - 1].end,
+      end: endTimeStr,
+      mode: session.mode,
+      consoleType: session.consoleType,
+      table: session.table,
+    });
+  } else {
+    periods.push({
+      start: session.timeStart,
+      end: endTimeStr,
+      mode: session.mode,
+      consoleType: session.consoleType,
+      table: session.table,
+    });
+  }
 
-module.exports = { getPricingRate, calculateCost };
+  let totalMinutes = 0,
+    totalWeightedRate = 0;
+  const periodsDetails = [];
+  for (let p of periods) {
+    const { minutes, rate, cost } = await getPeriodCost(
+      p.start,
+      p.end,
+      p.mode,
+      p.consoleType,
+      p.table,
+      session.gameNetId,
+      getPricingRate
+    );
+    if (minutes > 0) {
+      totalMinutes += minutes;
+      totalWeightedRate += minutes * rate;
+      periodsDetails.push({
+        minutes,
+        table: p.table,
+        consoleType: p.consoleType,
+        mode: p.mode,
+        rate,
+        cost,
+      });
+    }
+  }
+
+  if (totalMinutes === 0) {
+    return {
+      gameCost: 0,
+      totalMinutes: 0,
+      effectiveMinutes: 0,
+      weightedAvgRate: 0,
+      hasChanges: false,
+      periodsDetails: [],
+    };
+  }
+
+  const hasChanges = session.history && session.history.length > 0;
+  let effectiveMinutes = totalMinutes;
+  if (useMinimumHour && !hasChanges && totalMinutes < 60) {
+    effectiveMinutes = 60;
+  }
+
+  let gameCost = Math.round(
+    (effectiveMinutes / 60) * (totalWeightedRate / totalMinutes)
+  );
+  if (isNaN(gameCost)) gameCost = 0;
+  console.log('calculateCostWithDetails step 1', gameCost);
+
+  // گرد کردن (همان منطق قبلی)
+  if (useRoundUpPrice) {
+    // const roundBase = priceUnit === 'Rial' ? 50000 : 5000;
+    const roundBase = 5000;
+    gameCost = Math.ceil(gameCost / roundBase) * roundBase;
+  } else if (useRoundDownPrice) {
+    // const roundBase = priceUnit === 'Rial' ? 50000 : 5000;
+    const roundBase = 5000;
+    gameCost = Math.floor(gameCost / roundBase) * roundBase;
+  } else {
+    const roundBase = 1000;
+    // const roundBase = priceUnit === 'Rial' ? 10000 : 1000;
+    gameCost = Math.floor(gameCost / roundBase) * roundBase;
+    console.log(
+      'calculateCostWithDetails step 2',
+      Math.floor(gameCost / roundBase) * roundBase
+    );
+  }
+  console.log('calculateCostWithDetails step 3', gameCost);
+
+  return {
+    gameCost,
+    totalMinutes,
+    effectiveMinutes,
+    weightedAvgRate: totalWeightedRate / totalMinutes,
+    hasChanges,
+    periodsDetails,
+  };
+}
+
+module.exports = {
+  getPricingRate,
+  calculateCost,
+  getPeriodCost,
+  calculateCostWithDetails,
+};

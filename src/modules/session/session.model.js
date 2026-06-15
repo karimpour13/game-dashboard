@@ -22,13 +22,11 @@ const cafeItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const logSchema = new mongoose.Schema(
+const logEntrySchema = new mongoose.Schema(
   {
-    timestamp: String,
-    eventType: String,
-    message: String,
-    gameCost: Number,
-    cafeCost: Number,
+    type: { type: String, required: true }, // نوع رویداد (session_start, mode_change, ...)
+    timestamp: { type: Number, default: Date.now }, // میلی‌ثانیه
+    data: { type: mongoose.Schema.Types.Mixed, required: true }, // داده‌های رویداد
   },
   { _id: false }
 );
@@ -58,6 +56,7 @@ const sessionSchema = new mongoose.Schema(
     history: [historySchema],
     cafeItems: [cafeItemSchema],
     cafeCost: { type: Number, default: 0 },
+    gameCost: { type: Number, default: 0 },
     paidAmount: { type: Number, default: 0 },
     discountPercent: { type: Number, default: 0 },
     discountFixed: { type: Number, default: 0 },
@@ -65,7 +64,7 @@ const sessionSchema = new mongoose.Schema(
     extraPercent: { type: Number, default: 0 },
     extraFixed: { type: Number, default: 0 },
     note: String,
-    logs: [logSchema],
+    logs: [logEntrySchema],
     countdownEnd: Date,
     startTimeMs: Number, // برای تایمر زنده در فرانت (اختیاری)
   },
