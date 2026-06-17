@@ -24,7 +24,6 @@ let tableSelect;
 // ========== اضافات جدید برای ارتباط با API ==========
 let userRole = null; // 'admin' یا 'superAdmin'
 let currentGameNetId = null; // برای سوپرادمین انتخاب شده
-//console.log(typeof NiceSelect);
 // Helper: درخواست fetch با توکن
 let isRefreshing = false;
 let failedQueue = [];
@@ -104,6 +103,7 @@ async function apiFetch(url, options = {}) {
 
   return makeRequest();
 }
+
 function debounce(func, delay) {
   let timeoutId;
   return function (...args) {
@@ -702,6 +702,8 @@ async function customPrompt(msg, type = 'text') {
 async function checkLogin() {
   const username = document.getElementById('loginUsername').value;
   const password = document.getElementById('loginPassword').value;
+  const rememberMe = document.getElementById('rememberMe').checked; // ← خواندن وضعیت چک‌باکس
+
   if (!username || !password) {
     customAlert('لطفاً نام کاربری و رمز عبور را وارد کنید');
     return;
@@ -710,7 +712,7 @@ async function checkLogin() {
   try {
     const data = await apiFetch('/api/v1/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, rememberMe }),
       noAuth: true,
     });
     localStorage.setItem('accessToken', data.accessToken);
@@ -3587,6 +3589,20 @@ async function render() {
   const sortBy = document.getElementById('sortSelect')?.value || 'default';
   const sessions = sortSessions(originalSessions, sortBy);
 
+  const emptyBox = document.getElementById('emptyStateBox');
+  const tableWrapper = document.getElementById('tableWrapper');
+
+  // sessions قبلاً از sortSessions ایجاد شده
+  if (!sessions || sessions.length === 0) {
+    // نمایش باکس خالی، مخفی کردن جدول
+    if (emptyBox) emptyBox.style.display = 'block';
+    if (tableWrapper) tableWrapper.style.display = 'none';
+  } else {
+    // مخفی کردن باکس خالی، نمایش جدول
+    if (emptyBox) emptyBox.style.display = 'none';
+    if (tableWrapper) tableWrapper.style.display = 'block';
+  }
+
   sessionsBody.innerHTML = '';
 
   // محاسبه تعداد دستگاه‌های فعال
@@ -4869,6 +4885,202 @@ function setupExtraSync() {
   });
 }
 
+// ================== تنظیم سال جاری شمسی در فوتر ==================
+const yearSpan = document.getElementById('currentYear');
+if (yearSpan) {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('fa-IR', { year: 'numeric' });
+  yearSpan.innerText = formatter.format(now);
+}
+
+// ================== مودال درباره ما ==================
+const aboutModal = document.getElementById('aboutModal');
+const openAboutBtn = document.getElementById('openAboutModalBtn');
+function openAboutModal() {
+  if (aboutModal) aboutModal.style.display = 'flex';
+}
+function closeAboutModal() {
+  if (aboutModal) aboutModal.style.display = 'none';
+}
+if (openAboutBtn) openAboutBtn.addEventListener('click', openAboutModal);
+if (aboutModal)
+  aboutModal.addEventListener('click', (e) => {
+    if (e.target === aboutModal) closeAboutModal();
+  });
+
+// ================== مودال پشتیبانی ==================
+const supportModal = document.getElementById('supportModal');
+const openSupportBtn = document.getElementById('openSupportModalBtn');
+function openSupportModal() {
+  if (supportModal) {
+    supportModal.style.display = 'flex';
+    // پاک کردن پیغام موفقیت/خطای قبلی
+    const statusDiv = document.getElementById('supportFormStatus');
+    if (statusDiv) statusDiv.innerHTML = '';
+  }
+}
+function closeSupportModal() {
+  if (supportModal) {
+    supportModal.style.display = 'none';
+    const statusDiv = document.getElementById('supportFormStatus');
+    if (statusDiv) statusDiv.innerHTML = '';
+  }
+}
+if (openSupportBtn) openSupportBtn.addEventListener('click', openSupportModal);
+if (supportModal)
+  supportModal.addEventListener('click', (e) => {
+    if (e.target === supportModal) closeSupportModal();
+  });
+
+// پر کردن اطلاعات کاربر لاگین شده در فرم پشتیبانی
+function fillUserInfoInSupportForm() {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const nameInput = document.getElementById('supportName');
+  const emailInput = document.getElementById('supportEmail');
+  if (nameInput && user.firstName && user.lastName) {
+    nameInput.value = `${user.firstName} ${user.lastName}`;
+  }
+  if (emailInput && user.email) {
+    emailInput.value = user.email;
+  }
+}
+
+// نمایش نام فایل انتخاب شده
+const fileInput = document.getElementById('supportAttachment');
+if (fileInput) {
+  fileInput.addEventListener('change', (e) => {
+    const preview = document.getElementById('fileNamePreview');
+    if (preview && e.target.files.length) {
+      preview.innerText = `📎 ${e.target.files[0].name}`;
+    } else if (preview) {
+      preview.innerText = '';
+    }
+  });
+}
+
+// ارسال فرم پشتیبانی
+const supportForm = document.getElementById('supportForm');
+if (supportForm) {
+  supportForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('supportName').value.trim();
+    const email = document.getElementById('supportEmail').value.trim();
+    const subjectType = document.getElementById('supportSubject').value;
+    const message = document.getElementById('supportMessage').value.trim();
+    const file = document.getElementById('supportAttachment').files[0];
+    const statusDiv = document.getElementById('supportFormStatus');
+
+    if (!name || !email || !subjectType || !message) {
+      statusDiv.innerHTML =
+        '<span style="color: var(--warning);">❌ لطفاً تمام فیلدها را پر کنید</span>';
+      return;
+    }
+    const emailRegex = /^[^\s@]+@([^\s@.,]+\.)+[^\s@.,]{2,}$/;
+    if (!emailRegex.test(email)) {
+      statusDiv.innerHTML =
+        '<span style="color: var(--warning);">❌ ایمیل معتبر وارد کنید</span>';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('email', email);
+    formData.append('subjectType', subjectType);
+    formData.append('message', message);
+    if (file) formData.append('attachment', file);
+
+    statusDiv.innerHTML =
+      '<span style="color: var(--success);">⏳ در حال ارسال...</span>';
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/contact/support', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`, // ← اضافه کردن توکن
+        },
+        body: formData,
+      });
+      const data = await response.json();
+      if (response.ok) {
+        statusDiv.innerHTML =
+          '<span style="color: var(--success);">✅ پیام شما با موفقیت ارسال شد</span>';
+        supportForm.reset();
+        const preview = document.getElementById('fileNamePreview');
+        if (preview) preview.innerText = '';
+        setTimeout(() => closeSupportModal(), 2000);
+      } else {
+        statusDiv.innerHTML = `<span style="color: var(--warning);">⚠️ ${data.message || 'خطا در ارسال'}</span>`;
+      }
+    } catch (err) {
+      console.error(err);
+      statusDiv.innerHTML =
+        '<span style="color: var(--warning);">⚠️ خطا در ارتباط با سرور</span>';
+    }
+  });
+}
+
+// پر کردن خودکار اطلاعات کاربر هنگام باز شدن مودال پشتیبانی
+if (openSupportBtn) {
+  openSupportBtn.addEventListener('click', () => {
+    fillUserInfoInSupportForm();
+  });
+}
+
+// ================== فراموشی رمز عبور ==================
+const forgotLink = document.getElementById('forgotPasswordLink');
+const forgotModal = document.getElementById('forgotPasswordModal');
+const closeForgotBtn = document.getElementById('closeForgotModalBtn');
+const sendResetBtn = document.getElementById('sendResetLinkBtn');
+
+if (forgotLink) {
+  forgotLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (forgotModal) forgotModal.style.display = 'flex';
+  });
+}
+if (closeForgotBtn) {
+  closeForgotBtn.addEventListener('click', () => {
+    if (forgotModal) forgotModal.style.display = 'none';
+    document.getElementById('resetEmail').value = '';
+  });
+}
+if (sendResetBtn) {
+  sendResetBtn.addEventListener('click', async () => {
+    const email = document.getElementById('resetEmail').value.trim();
+    if (!email) {
+      customAlert('لطفاً ایمیل خود را وارد کنید');
+      return;
+    }
+    try {
+      const res = await fetch('/api/v1/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      customAlert(data.message || 'لینک بازیابی به ایمیل شما ارسال شد.');
+      if (forgotModal) forgotModal.style.display = 'none';
+      document.getElementById('resetEmail').value = '';
+    } catch (err) {
+      customAlert(`خطا: ${err.message}`);
+    }
+  });
+}
+// بستن مودال با کلیک روی overlay
+window.addEventListener('click', (e) => {
+  if (e.target === forgotModal && forgotModal)
+    forgotModal.style.display = 'none';
+});
+// ///////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////
+// ///////////////////////.................../////////////
+// /////////////////////// Activity log code /////////////
+// ///////////////////////.................../////////////
+// ///////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////
+
 function formatMoneyWithColor(amount, type = 'default') {
   if (amount === undefined || amount === null) return '-';
   let displayAmount = amount;
@@ -4891,6 +5103,7 @@ function formatMoneyWithColor(amount, type = 'default') {
   }
   return `<span style="color: ${color};">${formatted}</span>`;
 }
+
 function getEventIcon(eventType) {
   const icons = {
     session_start: '🎮',

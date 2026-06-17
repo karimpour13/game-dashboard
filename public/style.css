@@ -2784,6 +2784,384 @@ margin-left: 10px;
 #trashTableBody td   .btn.btn-log.btn-log-delete-modal{
  }
 
+ /* ================== فوتر با دکمه‌های لینک (سمت راست) ================== */
+ 
+/* ---------- فوتر اختصاصی ---------- */
+.footer-main {
+  background: var(--panel-bg);
+  border-top: 1px solid rgba(0, 243, 255, 0.2);
+  padding: 20px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  margin-top: auto  ; /* چسبیدن به پایین */
+}
+
+.footer-main .footer-inner {
+  max-width: 1400px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.footer-main .footer-copyright {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  flex: 1;
+  order: 2;
+}
+
+.footer-main .footer-buttons {
+  display: flex;
+  gap: 20px;
+  order: 1;
+  width: 100%;
+}
+
+.footer-main .footer-btn-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 5px 0;
+  transition: 0.2s;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.footer-main .footer-btn-link:hover {
+  color: var(--secondary);
+  text-shadow: 0 0 4px var(--secondary);
+}
+
+@media (max-width: 700px) {
+  .footer-main .footer-inner {
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+  }
+  .footer-main .footer-buttons {
+    order: 1;
+  }
+  .footer-main .footer-copyright {
+    order: 2;
+  }
+}
+
+/* ---------- مودال‌های اختصاصی (اسکرول مستقل) ---------- */
+.modal-overlay-custom {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 3000;
+  justify-content: center;
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.modal-overlay-custom .modal-content-custom {
+  background: var(--panel-bg);
+  border-radius: 24px;
+  width: 100%;
+  max-width: 500px;
+  border: 1px solid rgba(0, 243, 255, 0.3);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  animation: fadeInUp 0.3s ease;
+  overflow: hidden;
+  margin: auto;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-overlay-custom .modal-header-custom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  background: rgba(0, 243, 255, 0.05);
+  border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.modal-overlay-custom .modal-header-custom h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  background: none;
+  -webkit-text-fill-color: var(--primary);
+  color: var(--primary);
+}
+
+.modal-overlay-custom .modal-close-custom {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: 0.2s;
+  line-height: 1;
+}
+
+.modal-overlay-custom .modal-close-custom:hover {
+  color: var(--warning);
+  transform: scale(1.1);
+}
+
+.modal-overlay-custom .modal-body-custom {
+  padding: 24px;
+  color: var(--text-main);
+  line-height: 1.6;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ---------- درباره ما (داخل مودال) ---------- */
+.modal-overlay-custom .contact-info {
+  background: rgba(0, 243, 255, 0.05);
+  border-radius: 16px;
+  padding: 15px;
+  margin: 15px 0;
+}
+
+.modal-overlay-custom .contact-info p {
+  margin: 8px 0;
+}
+
+.modal-overlay-custom .about-highlight {
+  background: rgba(0, 243, 255, 0.1);
+  padding: 10px;
+  border-radius: 12px;
+  text-align: center;
+  margin-top: 15px;
+  font-weight: bold;
+  color: var(--primary);
+}
+
+/* ---------- فرم پشتیبانی (داخل مودال) ---------- */
+.modal-overlay-custom .support-modal input,
+.modal-overlay-custom .support-modal select,
+.modal-overlay-custom .support-modal textarea {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  background: var(--input-bg);
+  border: 1px solid rgba(150, 150, 150, 0.3);
+  border-radius: 12px;
+  color: var(--text-main);
+  font-family: inherit;
+  transition: 0.2s;
+}
+
+.modal-overlay-custom .support-modal input:focus,
+.modal-overlay-custom .support-modal select:focus,
+.modal-overlay-custom .support-modal textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+}
+
+ .modal-overlay-custom .file-upload input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.modal-overlay-custom .file-label {
+  display: inline-block;
+  background: rgba(0, 243, 255, 0.1);
+  padding: 10px 20px;
+  border-radius: 40px;
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 0.9rem;
+  transition: 0.2s;
+  border: 1px solid var(--primary);
+}
+
+.modal-overlay-custom .file-label:hover {
+  background: var(--primary);
+  color: var(--bg-color);
+}
+
+.modal-overlay-custom .file-name-preview {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: inline-block;
+  max-width: 100%;
+  word-break: break-all;
+ 
+}
+
+ 
+
+.modal-overlay-custom .support-modal .btn-submit {
+  width: 100%;
+  padding: 12px;
+  margin-top: 5px;
+}
+
+#supportAttachment{
+    margin-top: 10px;
+}
+
+@media (max-width: 700px) {
+  .modal-overlay-custom .support-modal .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+
+/* ---------- اپلیکیشن (برای چسبیدن فوتر به پایین) ---------- */
+#appScreen.app-active {
+  display: flex !important;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.empty-state {
+  display: none;
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--input-bg);
+  border-radius: 24px;
+  border: 2px dashed rgba(0, 243, 255, 0.2);
+  margin: 20px 0;
+  animation: fadeInUp 0.4s ease;
+}
+
+.empty-state-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  display: block;
+  filter: grayscale(0.3);
+}
+
+.empty-state-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.empty-state-desc {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 450px;
+  margin: 0 auto 25px;
+  line-height: 1.6;
+}
+
+.empty-state-btn {
+  padding: 12px 35px;
+  font-size: 1rem;
+  border-radius: 40px;
+  background: linear-gradient(45deg, var(--primary), var(--secondary));
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: 0.3s;
+  box-shadow: 0 4px 15px rgba(0, 243, 255, 0.3);
+}
+
+.empty-state-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(0, 243, 255, 0.4);
+}
+
+/* سازگاری با تم روشن */
+[data-theme="light"] .empty-state {
+  border-color: rgba(0, 102, 204, 0.3);
+}
+[data-theme="light"] .empty-state-btn {
+  background: linear-gradient(45deg, #0066cc, #8a2be2);
+}
+/* ================== چک‌باکس «مرا به خاطر بسپار» در لاگین ================== */
+.login-remember-wrapper {
+  display: flex;
+  align-items: center;
+  margin: 15px 0 20px;
+  justify-content: flex-start;
+}
+
+.login-remember-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  user-select: none;
+}
+
+.login-remember-label input[type="checkbox"] {
+  display: none;
+}
+
+.login-remember-label .checkmark-login {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+  flex-shrink: 0;
+}
+
+.login-remember-label input:checked + .checkmark-login {
+  background: #00bcd4;
+  border-color: #00bcd4;
+}
+
+.login-remember-label input:checked + .checkmark-login::after {
+  content: "✓";
+  color: #fff;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.login-remember-label:hover .checkmark-login {
+  border-color: #00bcd4;
+}
+
+/* تنظیمات برای تم روشن */
+[data-theme="light"] .login-remember-label {
+  color: #333;
+}
+[data-theme="light"] .login-remember-label .checkmark-login {
+  border-color: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .login-remember-label input:checked + .checkmark-login {
+  background: #0066cc;
+  border-color: #0066cc;
+}
 /* ====================================================== */
 /* ====================================================== */
 /* ====================================================== */
