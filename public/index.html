@@ -70,8 +70,50 @@
                 required
               />
             </div>
+            <!-- ========== چک‌باکس «مرا به خاطر بسپار» ========== -->
+            <div class="login-remember-wrapper">
+              <label class="login-remember-label">
+                <input type="checkbox" id="rememberMe" />
+                <span class="checkmark-login"></span>
+                مرا به خاطر بسپار
+              </label>
+            </div>
             <button type="button" class="btn-login" onclick="checkLogin()">
               ورود به حساب
+            </button>
+          </div>
+          <div style="text-align: center; margin-top: 15px">
+            <a
+              href="#"
+              id="forgotPasswordLink"
+              style="color: #00bcd4; text-decoration: none"
+              >رمز عبور خود را فراموش کرده‌اید؟</a
+            >
+          </div>
+        </div>
+      </div>
+      <div id="forgotPasswordModal" class="modal-overlay-custom">
+        <div class="modal-content" style="width: 350px">
+          <h3 style="margin-top: 0">بازیابی رمز عبور</h3>
+          <p>ایمیل خود را وارد کنید تا لینک بازیابی برای شما ارسال شود.</p>
+          <div class="input-group">
+            <input
+              type="email"
+              id="resetEmail"
+              placeholder="example@domain.com"
+              style="width: 100%"
+            />
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: 20px">
+            <button
+              id="sendResetLinkBtn"
+              class="btn btn-success"
+              style="flex: 1"
+            >
+              ارسال لینک
+            </button>
+            <button id="closeForgotModalBtn" class="btn btn-danger">
+              انصراف
             </button>
           </div>
         </div>
@@ -312,7 +354,7 @@
             </div>
           </div>
 
-          <div style="overflow-x: auto">
+          <div id="tableWrapper" style="overflow-x: auto">
             <table>
               <thead>
                 <tr>
@@ -327,6 +369,21 @@
               </thead>
               <tbody id="sessionsBody"></tbody>
             </table>
+            <!-- ========== باکس خالی (جلسه وجود ندارد) ========== -->
+          </div>
+          <div id="emptyStateBox" class="empty-state" style="display: none">
+            <div class="empty-state-icon">🎮</div>
+            <h3 class="empty-state-title">هیچ جلسه‌ای ثبت نشده است</h3>
+            <p class="empty-state-desc">
+              برای شروع یک جلسه جدید، ابتدا تاریخ، میز و حالت بازی را انتخاب
+              کنید.
+            </p>
+            <button
+              class="btn btn-primary empty-state-btn"
+              onclick="startSession()"
+            >
+              ▶️ شروع جلسه جدید
+            </button>
           </div>
         </div>
       </div>
@@ -1259,7 +1316,108 @@
         ></div>
       </div>
     </div>
+    <!-- مودال درباره ما -->
+    <div id="aboutModal" class="modal-overlay-custom">
+      <div class="modal-content-custom about-modal">
+        <div class="modal-header-custom">
+          <h3>📖 درباره ما</h3>
+          <button class="modal-close-custom" onclick="closeAboutModal()">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body-custom">
+          <p>
+            سامانه مدیریت گیم‌نت <strong>گیم لند</strong> با هدف ارائه ابزاری
+            حرفه‌ای، سریع و زیبا برای مدیریت کافی‌نت و گیم‌نت‌ها طراحی شده است.
+          </p>
+          <p>
+            امکانات پیشرفته، پشتیبانی ۲۴ ساعته، قابلیت سفارشی‌سازی و رابط کاربری
+            واکنش‌گرا، این سامانه را به انتخابی ایده‌آل تبدیل کرده است.
+          </p>
+          <div class="contact-info">
+            <p>
+              <i class="fas fa-phone-alt"></i>
+              <strong>شماره تماس:</strong> ۰۲۱-۱۲۳۴۵۶۷۸
+            </p>
+            <p>
+              <i class="fas fa-envelope"></i>
+              <strong>ایمیل:</strong> support@gameland.ir
+            </p>
+          </div>
+          <div class="about-highlight">🚀 با ما همراه باشید</div>
+        </div>
+      </div>
+    </div>
+    <!-- مودال ارتباط با ما -->
+    <div id="supportModal" class="modal-overlay-custom">
+      <div class="modal-content-custom support-modal">
+        <div class="modal-header-custom">
+          <h3>🛠️ پشتیبانی</h3>
+          <button class="modal-close-custom" onclick="closeSupportModal()">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body-custom">
+          <form id="supportForm" enctype="multipart/form-data">
+            <input
+              type="text"
+              id="supportName"
+              placeholder="نام و نام خانوادگی"
+              required
+            />
+            <input
+              type="email"
+              id="supportEmail"
+              placeholder="ایمیل شما"
+              required
+            />
+            <select id="supportSubject" required>
+              <option value="">انتخاب موضوع</option>
+              <option value="انتقاد">انتقاد</option>
+              <option value="پیشنهاد">پیشنهاد</option>
+              <option value="گزارش باگ">گزارش باگ</option>
+              <option value="مشکل فنی">مشکل فنی</option>
+              <option value="سایر">سایر</option>
+            </select>
+            <textarea
+              id="supportMessage"
+              rows="4"
+              placeholder="متن پیام ..."
+              required
+            ></textarea>
+            <div class="file-upload">
+              <label for="supportAttachment" class="file-label"
+                >📎 پیوست فایل (اختیاری)</label
+              >
+              <input
+                type="file"
+                id="supportAttachment"
+                accept="image/*,application/pdf, .zip, .txt"
+              />
+              <div id="fileNamePreview" class="file-name-preview"></div>
+            </div>
+            <button type="submit" class="btn-submit">✉️ ارسال پیام</button>
+            <div id="supportFormStatus" class="form-status"></div>
+          </form>
+        </div>
+      </div>
+    </div>
 
+    <footer class="footer-main">
+      <div class="footer-inner">
+        <div class="footer-buttons">
+          <button class="footer-btn-link" id="openAboutModalBtn">
+            درباره ما
+          </button>
+          <button class="footer-btn-link" id="openSupportModalBtn">
+            پشتیبانی
+          </button>
+        </div>
+        <div class="footer-copyright">
+          کلیه حقوق متعلق به گیم لند است. © <span id="currentYear"></span>
+        </div>
+      </div>
+    </footer>
     <script src="libs/jalalidatepicker/jalalidatepicker.min.js"></script>
     <script src="libs/nice-select2/nice-select2.js"></script>
     <script src="script.js"></script>

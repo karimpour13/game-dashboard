@@ -65,6 +65,12 @@ app.use(
   updateLastActivity,
   require('./modules/deletedSession/deletedSession.routes')
 );
+app.use(
+  '/api/contact',
+  auth,
+  updateLastActivity,
+  require('./modules/contact/contact.routes')
+);
 
 // 404 handler
 app.use((req, res, next) => {

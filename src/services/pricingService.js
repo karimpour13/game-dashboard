@@ -104,7 +104,6 @@ async function calculateCost(session, endTimeStr, gameNetSettings) {
     (effectiveMinutes / 60) * (totalWeightedRate / totalMinutes)
   );
   if (isNaN(gameCost)) gameCost = 0;
-  console.log('gameCost step 1', gameCost);
 
   // گرد کردن بر اساس تنظیمات
   const roundBase = 5000;
@@ -117,12 +116,7 @@ async function calculateCost(session, endTimeStr, gameNetSettings) {
     // حالت پیش‌فرض: بدون گرد کردن یا گرد به پایین هزار تومانی (اختیاری)
     const defaultBase = 1000;
     gameCost = Math.floor(gameCost / defaultBase) * defaultBase;
-    console.log(
-      'gameCost step 2 if',
-      Math.floor(gameCost / defaultBase) * defaultBase
-    );
   }
-  console.log('gameCost step 3', gameCost);
   if (isNaN(gameCost)) gameCost = 0;
 
   return {
@@ -204,7 +198,6 @@ async function calculateCostWithDetails(session, endTimeStr, gameNetSettings) {
     (effectiveMinutes / 60) * (totalWeightedRate / totalMinutes)
   );
   if (isNaN(gameCost)) gameCost = 0;
-  console.log('calculateCostWithDetails step 1', gameCost);
 
   // گرد کردن (همان منطق قبلی)
   if (useRoundUpPrice) {
@@ -219,12 +212,7 @@ async function calculateCostWithDetails(session, endTimeStr, gameNetSettings) {
     const roundBase = 1000;
     // const roundBase = priceUnit === 'Rial' ? 10000 : 1000;
     gameCost = Math.floor(gameCost / roundBase) * roundBase;
-    console.log(
-      'calculateCostWithDetails step 2',
-      Math.floor(gameCost / roundBase) * roundBase
-    );
   }
-  console.log('calculateCostWithDetails step 3', gameCost);
 
   return {
     gameCost,
