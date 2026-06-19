@@ -4,7 +4,7 @@ const GameNet = require('../gameNet/gameNet.model');
 
 const createUser = async (data, currentUserRole) => {
   if (data.role === 'superAdmin' && currentUserRole !== 'superAdmin')
-    throw new Error('Only super admin can create super admin');
+    throw new Error('تنها سوپرادمین می‌تواند سوپرادمین ایجاد کند');
 
   // ========== اعتبارسنجی قبل از مونگو ==========
   // بررسی تکراری بودن نام کاربری

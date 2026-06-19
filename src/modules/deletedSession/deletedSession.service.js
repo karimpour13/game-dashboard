@@ -1,4 +1,4 @@
-const DeletedSession = require("./deletedSession.model");
+const DeletedSession = require('./deletedSession.model');
 
 /**
  * دریافت همه جلسات حذف شده برای یک گیم‌نت خاص
@@ -7,9 +7,9 @@ const DeletedSession = require("./deletedSession.model");
 exports.getDeletedSessions = async (req, res, next) => {
   try {
     let gameNetId = req.user.gameNetId;
-    if (req.user.role === "superAdmin") {
+    if (req.user.role === 'superAdmin') {
       if (!req.query.gameNetId)
-        throw new Error("gameNetId required for superAdmin");
+        throw new Error('gameNetId required for superAdmin');
       gameNetId = req.query.gameNetId;
     }
 
@@ -45,7 +45,7 @@ exports.getDeletedSessions = async (req, res, next) => {
  */
 exports.deleteForever = async (id, gameNetId) => {
   const result = await DeletedSession.deleteOne({ _id: id, gameNetId });
-  if (result.deletedCount === 0) throw new Error("Deleted session not found");
+  if (result.deletedCount === 0) throw new Error('Deleted جلسه یافت نشد');
 };
 
 /**
@@ -55,15 +55,15 @@ exports.deleteForever = async (id, gameNetId) => {
  */
 exports.restoreSession = async (id, gameNetId) => {
   const deleted = await DeletedSession.findOne({ _id: id, gameNetId });
-  if (!deleted) throw new Error("Deleted session not found");
+  if (!deleted) throw new Error('Deleted جلسه یافت نشد');
 
-  const Session = require("../session/session.model");
+  const Session = require('../session/session.model');
   const sessionData = deleted.session;
   // حذف فیلدهای اضافی که نباید در جلسه جدید باشند
   delete sessionData._id;
   delete sessionData.createdAt;
   delete sessionData.updatedAt;
-  sessionData.status = "closed"; // یا هر وضعیت مناسب
+  sessionData.status = 'closed'; // یا هر وضعیت مناسب
   const restored = await Session.create(sessionData);
 
   await DeletedSession.deleteOne({ _id: id });

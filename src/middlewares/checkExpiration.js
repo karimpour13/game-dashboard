@@ -8,7 +8,7 @@ module.exports = async (req, res, next) => {
 
     // دریافت اطلاعات کامل کاربر
     const user = await User.findById(req.user.id).populate('gameNetId');
-    if (!user) return next({ status: 401, message: 'User not found' });
+    if (!user) return next({ status: 401, message: 'کاربر یافت نشد' });
 
     // ========== چک انقضای کاربر ==========
     if (user.expiresAt && new Date() > new Date(user.expiresAt)) {

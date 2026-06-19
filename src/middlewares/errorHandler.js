@@ -7,7 +7,7 @@ const errorHandler = (err, req, res, next) => {
   // فقط درخواست‌های API (که با /api شروع می‌شوند) باید پاسخ JSON دریافت کنند
   if (req.path.startsWith('/api')) {
     return res.status(status).json({
-      message: err.message || 'Internal Server Error',
+      message: err.message || 'خطای داخلی سرور',
       ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
     });
   }

@@ -787,7 +787,7 @@ async function checkAuthOnLoad() {
     } catch (err) {
       const isUnauthorized =
         err.message.includes('401') ||
-        err.message.includes('Invalid token') ||
+        err.message.includes('توکن نامعتبر است') ||
         err.message.includes('Unauthorized');
       if (retry && isUnauthorized) {
         await refreshAccessToken();
