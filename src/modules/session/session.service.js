@@ -9,6 +9,7 @@ const {
 } = require('../../services/pricingService');
 const { decreaseStock, increaseStock } = require('../cafe/cafe.service');
 const { getReserveTimestamp } = require('../../utils/helpers');
+const User = require('../user/user.model');
 // helper: دریافت تنظیمات گیم‌نت
 async function getGameNetSettings(gameNetId) {
   const GameNet = require('../gameNet/gameNet.model');
@@ -18,7 +19,24 @@ async function getGameNetSettings(gameNetId) {
 }
 
 // شروع جلسه فعال (بدون رزرو)
-async function startSession(data, gameNetId) {
+async function startSession(data, gameNetId, reqUserId) {
+  const user = await User.findById(reqUserId).populate('gameNetId');
+  if (!user) throw new Error('User not found');
+
+  // چک انقضای کاربر
+  if (user.expiresAt && new Date() > new Date(user.expiresAt)) {
+    throw new Error('حساب کاربری شما منقضی شده است.');
+  }
+
+  // چک انقضای گیم‌نت
+  if (user.role === 'admin' && user.gameNetId) {
+    if (!user.gameNetId.isActive) {
+      throw new Error('گیم‌نت غیرفعال است');
+    }
+    if (new Date() > new Date(user.gameNetId.expiresAt)) {
+      throw new Error('اشتراک گیم‌نت شما منقضی شده است.');
+    }
+  }
   const session = await Session.create({
     ...data,
     gameNetId,
@@ -50,7 +68,39 @@ async function startSession(data, gameNetId) {
 }
 
 // رزرو میز
-async function reserveSession(data, gameNetId) {
+async function reserveSession(data, gameNetId, reqUserId) {
+  const user = await User.findById(reqUserId).populate('gameNetId');
+  if (!user) throw new Error('User not found');
+
+  // چک انقضای کاربر
+  if (user.expiresAt && new Date() > new Date(user.expiresAt)) {
+    throw new Error('حساب کاربری شما منقضی شده است.');
+  }
+
+  // چک انقضای گیم‌نت
+  if (user.role === 'admin' && user.gameNetId) {
+    if (!user.gameNetId.isActive) {
+      throw new Error('گیم‌نت غیرفعال است');
+    }
+    if (new Date() > new Date(user.gameNetId.expiresAt)) {
+      throw new Error('اشتراک گیم‌نت شما منقضی شده است.');
+    }
+  }
+  // ========== چک کردن فعال بودن میز ==========
+  const activeSession = await Session.findOne({
+    gameNetId,
+    table: data.table,
+    status: 'active',
+  });
+
+  if (activeSession && !data.ignoreWarning) {
+    const error = new Error(
+      'این میز در حال حاضر فعال است. آیا مطمئن هستید که می‌خواهید آن را رزرو کنید؟'
+    );
+    error.status = 409;
+    error.code = 'ACTIVE_TABLE_WARNING';
+    throw error;
+  }
   const reserveDateTime = getReserveTimestamp(data.date, data.timeStart);
   const session = await Session.create({
     ...data,
@@ -78,7 +128,23 @@ async function reserveSession(data, gameNetId) {
 async function startReservedSession(sessionId, gameNetId) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'reserved')
-    throw new Error('Invalid reservation');
+    throw new Error('رزرو معتبر نیست.');
+
+  // ========== چک کردن فعال بودن میز ==========
+  const activeSession = await Session.findOne({
+    gameNetId,
+    table: session.table,
+    status: 'active',
+    _id: { $ne: sessionId }, // غیر از خود جلسه (برای اطمینان)
+  });
+
+  if (activeSession) {
+    const error = new Error(
+      `میز "${session.table}" در حال حاضر فعال است. لطفاً ابتدا جلسه فعال را ببندید.`
+    );
+    error.status = 409;
+    throw error;
+  }
 
   // ذخیره مقادیر مورد نیاز برای لاگ (قبل از تغییر)
   const table = session.table;

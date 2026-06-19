@@ -21,13 +21,23 @@ const login = async (username, password, rememberMe = false) => {
   const user = await User.findOne({ username }).populate('gameNetId');
   if (!user) throw new Error('Invalid credentials');
   if (!user.isActive) throw new Error('Account disabled');
-  if (
-    user.role === 'admin' &&
-    (!user.gameNetId ||
-      !user.gameNetId.isActive ||
-      new Date() > user.gameNetId.expiresAt)
-  ) {
-    throw new Error('GameNet expired or inactive');
+  // ========== چک انقضای کاربر ==========
+  if (user.expiresAt && new Date() > new Date(user.expiresAt)) {
+    throw new Error(
+      'حساب کاربری شما منقضی شده است. لطفاً با پشتیبانی تماس بگیرید.'
+    );
+  }
+
+  // ========== چک انقضای گیم‌نت (برای ادمین) ==========
+  if (user.role === 'admin') {
+    if (!user.gameNetId)
+      throw new Error('گیم‌نتی برای این کاربر تعریف نشده است');
+    if (!user.gameNetId.isActive) {
+      throw new Error('گیم‌نت غیرفعال است');
+    }
+    if (new Date() > new Date(user.gameNetId.expiresAt)) {
+      throw new Error('اشتراک گیم‌نت شما منقضی شده است.');
+    }
   }
   const match = await bcrypt.compare(password, user.password);
   if (!match) throw new Error('Invalid credentials');

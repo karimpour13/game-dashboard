@@ -112,25 +112,6 @@ function debounce(func, delay) {
   };
 }
 // دریافت gameNetId جاری (با توجه به نقش کاربر)
-async function getCurrentGameNetId() {
-  if (userRole === 'superAdmin') {
-    const select = document.getElementById('gameNetSelect');
-    if (select && select.value) return select.value;
-    // اگر سلکت مقدار نداشت، لیست گیم‌نت‌ها را بگیر و اولین را انتخاب کن
-    const gameNets = await apiFetch('/api/v1/gameNets');
-    if (gameNets && gameNets.length) {
-      const firstId = gameNets[0]._id;
-      if (select) select.value = firstId;
-      return firstId;
-    }
-    throw new Error('هیچ گیم‌نتی موجود نیست');
-  } else {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const gameNetId = user.gameNetId?._id || user.gameNetId;
-    if (!gameNetId) throw new Error('gameNetId برای ادمین تعریف نشده');
-    return gameNetId;
-  }
-}
 
 // بارگذاری دستگاه‌ها از API
 async function loadDevicesFromAPI() {
@@ -220,35 +201,6 @@ async function loadGameNetSettings() {
   }
 }
 // تابع پر کردن سلکت گیم‌نت برای سوپرادمین (همان که اضافه کردی)
-
-async function populateGameNetSelect() {
-  const select = document.getElementById('gameNetSelect');
-  if (!select) return;
-  if (userRole !== 'superAdmin') {
-    select.style.display = 'none';
-    return;
-  }
-  select.style.display = 'inline-block';
-  try {
-    const gameNets = await apiFetch('/api/v1/gameNets');
-    select.innerHTML = '<option value="">انتخاب گیم‌نت</option>';
-    gameNets.forEach((g) => {
-      const option = document.createElement('option');
-      option.value = g._id;
-      option.textContent = `${g.name}${g.isActive ? '' : ' (غیرفعال)'}`;
-      select.appendChild(option);
-    });
-    if (currentGameNetId) select.value = currentGameNetId;
-    select.onchange = async () => {
-      currentGameNetId = select.value;
-      if (currentGameNetId) {
-        await initSystem();
-      }
-    };
-  } catch (err) {
-    console.error(err);
-  }
-}
 
 // ================== مدیریت رمز عبور پویا ==================
 function getSystemPassword() {
@@ -723,6 +675,7 @@ async function checkLogin() {
     };
     localStorage.setItem('user', JSON.stringify(userForStorage));
     userRole = data.user.role;
+    await populateGameNetSelect();
     currentGameNetId = data.user.gameNetId;
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appScreen').style.display = 'block';
@@ -853,6 +806,7 @@ async function checkAuthOnLoad() {
     };
     localStorage.setItem('user', JSON.stringify(userForStorage));
     userRole = data.user.role;
+    await populateGameNetSelect();
     if (userRole === 'admin') {
       currentGameNetId = data.user.gameNetId;
     } else {
@@ -1838,6 +1792,84 @@ function handleUnitChange(e) {
   updatePriceUnit(e.target.value);
 }
 
+// function generateTableSelect() {
+//   const dateInput = document.getElementById('datePickerInput');
+//   let currentDate = dateInput ? toEnglishDigits(dateInput.value.trim()) : '';
+//   if (!currentDate) return;
+
+//   const sessions = (gameNet && gameNet[currentDate]) || [];
+//   const activeTables = sessions
+//     .filter((s) => s.status === 'active')
+//     .map((s) => s.table);
+//   const reservedTables = sessions
+//     .filter((s) => s.status === 'reserved')
+//     .map((s) => s.table);
+
+//   const select = document.getElementById('tableSelect');
+//   if (!select) return;
+
+//   // ذخیره مقدار قبلی برای بازیابی بعد از بازسازی
+//   const previousValue = select.value;
+
+//   // پاک کردن گزینه‌های قبلی
+//   select.innerHTML = '';
+
+//   if (!DEVICES || DEVICES.length === 0) {
+//     select.innerHTML = '<option value="">هیچ دستگاهی تعریف نشده</option>';
+//     return;
+//   }
+
+//   DEVICES.forEach((dev) => {
+//     let label = dev.name;
+//     let badges = '';
+//     if (dev.vip) badges += 'VIP 👑 ';
+//     if (dev.royal) badges += 'Royal 💎 ';
+//     if (dev.legendary) badges += 'Legendary 🌟 ';
+//     if (badges) label += ` (${badges.trim()})`;
+
+//     let status = '';
+//     if (activeTables.includes(dev.name)) status = '🔴 فعال';
+//     else if (reservedTables.includes(dev.name)) status = '🟡 رزرو';
+//     if (status) label += ` - ${status}`;
+
+//     const option = document.createElement('option');
+//     option.value = dev.name;
+//     option.textContent = label;
+//     select.appendChild(option);
+//   });
+
+//   // بازیابی مقدار قبلی اگر هنوز معتبر است
+//   if (
+//     previousValue &&
+//     [...select.options].some((opt) => opt.value === previousValue)
+//   ) {
+//     select.value = previousValue;
+//   }
+
+//   // === ریست کردن NiceSelect ===
+//   if (select.niceSelectInstance) {
+//     select.niceSelectInstance.destroy();
+//     delete select.niceSelectInstance;
+//   }
+
+//   if (typeof NiceSelect !== 'undefined') {
+//     const SelectClass = NiceSelect.default || NiceSelect;
+//     if (typeof SelectClass === 'function') {
+//       select.niceSelectInstance = new SelectClass(select, {
+//         searchable: true,
+//         placeholder: 'جستجو...',
+//         dir: 'rtl',
+//         searchPlaceholder: 'جستجو یا انتخاب میز...',
+//       });
+//     } else {
+//       console.error('NiceSelect is not a constructor', SelectClass);
+//     }
+//   } else {
+//     console.warn('NiceSelect library not loaded');
+//   }
+//   // بعد از پر کردن سلکت، گزینه‌های حالت بازی را به‌روز کن
+//   updateModeSelectOptions();
+// }
 function generateTableSelect() {
   const dateInput = document.getElementById('datePickerInput');
   let currentDate = dateInput ? toEnglishDigits(dateInput.value.trim()) : '';
@@ -1862,9 +1894,16 @@ function generateTableSelect() {
 
   if (!DEVICES || DEVICES.length === 0) {
     select.innerHTML = '<option value="">هیچ دستگاهی تعریف نشده</option>';
+    // ریست کردن NiceSelect
+    if (select.niceSelectInstance) {
+      select.niceSelectInstance.destroy();
+      delete select.niceSelectInstance;
+    }
+    updateModeSelectOptions();
     return;
   }
 
+  // === پر کردن گزینه‌ها با تمام ویژگی‌ها ===
   DEVICES.forEach((dev) => {
     let label = dev.name;
     let badges = '';
@@ -1884,24 +1923,25 @@ function generateTableSelect() {
     select.appendChild(option);
   });
 
-  // بازیابی مقدار قبلی اگر هنوز معتبر است
+  // === تنظیم مقدار انتخاب‌شده ===
+  // اگر مقدار قبلی در لیست جدید وجود داشت، آن را انتخاب کن
   if (
     previousValue &&
     [...select.options].some((opt) => opt.value === previousValue)
   ) {
     select.value = previousValue;
+  } else {
+    // در غیر این صورت، اولین دستگاه را انتخاب کن
+    select.value = DEVICES[0]?.name || '';
   }
 
-  // مقداردهی (یا بازنشانی) Nice-Select
+  // === ریست کردن NiceSelect (همیشه بعد از تغییر گزینه‌ها) ===
+  if (select.niceSelectInstance) {
+    select.niceSelectInstance.destroy();
+    delete select.niceSelectInstance;
+  }
+
   if (typeof NiceSelect !== 'undefined') {
-    // اگر نمونه قبلی وجود داشت، آن را نابود کن
-    if (
-      select.niceSelectInstance &&
-      typeof select.niceSelectInstance.destroy === 'function'
-    ) {
-      select.niceSelectInstance.destroy();
-    }
-    // دریافت کلاس اصلی (برای ماژول‌های دارای default)
     const SelectClass = NiceSelect.default || NiceSelect;
     if (typeof SelectClass === 'function') {
       select.niceSelectInstance = new SelectClass(select, {
@@ -1916,7 +1956,8 @@ function generateTableSelect() {
   } else {
     console.warn('NiceSelect library not loaded');
   }
-  // بعد از پر کردن سلکت، گزینه‌های حالت بازی را به‌روز کن
+
+  // === به‌روزرسانی حالت‌های بازی ===
   updateModeSelectOptions();
 }
 
@@ -2076,19 +2117,22 @@ async function saveReservation() {
     customAlert(`❌ حالت بازی "${mode}" برای این میز معتبر نیست.`);
     return;
   }
+
+  // ========== تعریف body بیرون از try ==========
+  const gameNetId = await getCurrentGameNetId();
+  const body = {
+    table,
+    timeStart: start,
+    mode,
+    consoleType,
+    date,
+    customerName,
+    customerPhone,
+    reservedDay: day,
+    gameNetId,
+  };
+  if (userRole !== 'superAdmin') delete body.gameNetId;
   try {
-    const gameNetId = await getCurrentGameNetId();
-    const body = {
-      table,
-      timeStart: start,
-      mode,
-      consoleType,
-      date,
-      customerName,
-      customerPhone,
-      reservedDay: day,
-      gameNetId,
-    };
     if (userRole !== 'superAdmin') delete body.gameNetId;
     await apiFetch('/api/v1/sessions/reserve', {
       method: 'POST',
@@ -2100,7 +2144,30 @@ async function saveReservation() {
     render();
     neonFlash();
   } catch (err) {
-    customAlert(`خطا: ${err.message}`);
+    // ========== مدیریت هشدار فعال بودن میز ==========
+    if (err.message && err.message.includes('این میز در حال حاضر فعال است')) {
+      const confirm = await customConfirm(
+        '⚠️ این میز در حال حاضر فعال است. آیا مطمئن هستید که می‌خواهید آن را رزرو کنید؟'
+      );
+      if (confirm) {
+        // ارسال مجدد با ignoreWarning
+        try {
+          const bodyWithIgnore = { ...body, ignoreWarning: true };
+          await apiFetch('/api/v1/sessions/reserve', {
+            method: 'POST',
+            body: JSON.stringify(bodyWithIgnore),
+          });
+          closeReservationModal();
+          await loadSessionsFromAPI(currentSelectedDate);
+          render();
+          neonFlash();
+        } catch (err2) {
+          customAlert(`خطا: ${err2.message}`);
+        }
+      }
+    } else {
+      customAlert(`خطا: ${err.message}`);
+    }
   }
 }
 
@@ -2110,20 +2177,26 @@ async function startReservedSession(sessionId) {
     customAlert('رزرو معتبر نیست.');
     return;
   }
+
   try {
     const gameNetId = await getCurrentGameNetId();
     const body = { gameNetId };
     if (userRole !== 'superAdmin') delete body.gameNetId;
+
     await apiFetch(`/api/v1/sessions/${session._id}/start-reserved`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
-    const currentDate = currentSelectedDate;
-    await loadSessionsFromAPI(currentDate);
+    await loadSessionsFromAPI(currentSelectedDate);
     render();
     neonFlash();
   } catch (err) {
-    customAlert(`خطا: ${err.message}`);
+    // ========== نمایش خطای فعال بودن میز ==========
+    if (err.message && err.message.includes('در حال حاضر فعال است')) {
+      customAlert(`⛔ ${err.message}`);
+    } else {
+      customAlert(`خطا: ${err.message}`);
+    }
   }
 }
 
@@ -5071,6 +5144,96 @@ window.addEventListener('click', (e) => {
   if (e.target === forgotModal && forgotModal)
     forgotModal.style.display = 'none';
 });
+
+// ================== مدیریت سلکت گیم‌نت (فقط برای سوپرادمین) ==================
+
+// پر کردن سلکت گیم‌نت در نوار بالایی
+async function populateGameNetSelect() {
+  const select = document.getElementById('superAdminGameNetSelect');
+  if (!select) return;
+
+  // اگر کاربر سوپرادمین نیست، سلکت و نوار را مخفی کن
+  if (userRole !== 'superAdmin') {
+    select.style.display = 'none';
+    const bar = document.getElementById('superAdminBar');
+    if (bar) bar.style.display = 'none';
+    return;
+  }
+
+  // نمایش نوار و سلکت
+  const bar = document.getElementById('superAdminBar');
+  if (bar) bar.style.display = 'flex';
+  select.style.display = 'flex';
+
+  try {
+    const gameNets = await apiFetch('/api/v1/gameNets');
+    select.innerHTML = '<option value="">انتخاب گیم‌نت</option>';
+    gameNets.forEach((g) => {
+      const option = document.createElement('option');
+      option.value = g._id;
+      option.textContent = `${g.name}${g.isActive ? '' : ' (غیرفعال)'}`;
+      select.appendChild(option);
+    });
+
+    // تنظیم مقدار فعلی
+    if (currentGameNetId) select.value = currentGameNetId;
+
+    // اتصال رویداد تغییر
+    select.removeEventListener('change', handleGameNetChange);
+    select.addEventListener('change', handleGameNetChange);
+  } catch (err) {
+    console.error('خطا در بارگذاری گیم‌نت‌ها:', err);
+  }
+}
+
+// هندلر تغییر گیم‌نت
+async function handleGameNetChange(e) {
+  const newId = e.target.value;
+  if (!newId) return;
+
+  // به‌روزرسانی شناسه گیم‌نت جاری
+  currentGameNetId = newId;
+
+  // بارگذاری مجدد تمام داده‌ها
+  await loadDevicesFromAPI();
+  await loadCafeMenuFromAPI();
+  await loadGameNetSettings();
+  await loadSessionsFromAPI(currentSelectedDate);
+  render();
+
+  // به‌روزرسانی نام گیم‌نت در هدر
+  try {
+    const gameNet = await apiFetch(`/api/v1/gameNets/${currentGameNetId}`);
+    if (gameNet && gameNet.name) {
+      const h1 = document.querySelector('#mainContainer h1');
+      if (h1) h1.innerText = gameNet.name;
+    }
+  } catch (err) {
+    console.error('خطا در دریافت نام گیم‌نت:', err);
+  }
+}
+
+// تابع برای دریافت gameNetId جاری (با توجه به نقش کاربر)
+async function getCurrentGameNetId() {
+  if (userRole === 'superAdmin') {
+    const select = document.getElementById('superAdminGameNetSelect');
+    if (select && select.value) return select.value;
+    // اگر سلکت مقدار نداشت، لیست گیم‌نت‌ها را بگیر و اولین را انتخاب کن
+    const gameNets = await apiFetch('/api/v1/gameNets');
+    if (gameNets && gameNets.length) {
+      const firstId = gameNets[0]._id;
+      if (select) select.value = firstId;
+      return firstId;
+    }
+    throw new Error('هیچ گیم‌نتی موجود نیست');
+  } else {
+    // برای ادمین معمولی
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const gameNetId = user.gameNetId?._id || user.gameNetId;
+    if (!gameNetId) throw new Error('gameNetId برای ادمین تعریف نشده');
+    return gameNetId;
+  }
+}
 // ///////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////

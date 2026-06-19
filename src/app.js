@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 
+const checkExpiration = require('./middlewares/checkExpiration');
 const errorHandler = require('./middlewares/errorHandler');
 const updateLastActivity = require('./middlewares/updateLastActivity');
 const { auth } = require('./middlewares/auth');
@@ -14,6 +15,7 @@ const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json());
+app.use(checkExpiration);
 app.use(morgan('dev'));
 
 // Static files (frontend)
