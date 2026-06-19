@@ -1,0 +1,175 @@
+/* =============================================
+   ریسپانسیو برای تبلت و موبایل
+   ============================================= */
+
+/* ---------- تبلت (768px تا 1024px) ---------- */
+@media (max-width: 1024px) {
+  .header-top {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .header-right, .header-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .btn-top {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+  .summary-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .summary-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .modal-content {
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+}
+ /* ---------- موبایل (زیر 768px) ---------- */
+@media (max-width: 768px) {
+  /* هدر */
+  .header-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .header-right, .header-left {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn-top {
+    font-size: 0.7rem;
+    padding: 4px 10px;
+  }
+  .theme-select {
+    width: 120px;
+    font-size: 0.7rem;
+  }
+
+  /* فرم‌های بالا */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  /* جدول - همه ستون‌ها نمایش داده می‌شوند */
+  #sessionsBody td,
+  #sessionsBody th {
+    padding: 6px 8px !important;
+    font-size: 0.7rem !important;
+  }
+
+  /* ===== کوچک‌تر کردن فونت تایمر ===== */
+  #sessionsBody td:nth-child(4) .live-timer {
+    font-size: 0.6rem !important;
+  }
+
+  /* دکمه‌های عملیات را کوچک‌تر */
+  #sessionsBody td:last-child .btn {
+    font-size: 0.6rem !important;
+    padding: 4px 6px !important;
+    min-width: 40px !important;
+  }
+
+  /* فوتر */
+  .footer-inner {
+    flex-direction: column !important;
+    gap: 5px !important;
+  }
+  .footer-buttons {
+    order: 1;
+    width: 100%;
+    justify-content: center;
+  }
+  .footer-copyright {
+    order: 2;
+    font-size: 0.7rem;
+  }
+  .simple-footer {
+    height: auto !important;
+    padding: 12px !important;
+  }
+
+  /* مودال‌ها */
+  .modal-content {
+    width: 98vw !important;
+    max-width: 98vw !important;
+    padding: 15px !important;
+    max-height: 95vh !important;
+    border-radius: 16px !important;
+  }
+  .modal-header-custom h3 {
+    font-size: 1.1rem !important;
+  }
+  .modal-body-custom {
+    padding: 15px !important;
+  }
+  #userForm .input-group {
+    grid-template-columns: 1fr !important;
+  }
+  .form-row {
+    flex-direction: column !important;
+  }
+
+  /* سلکتورها */
+  .nice-select {
+    font-size: 14px !important;
+    min-height: 44px !important;
+  }
+
+  /* باکس خالی */
+  .empty-state {
+    padding: 30px 15px !important;
+  }
+  .empty-state-icon {
+    font-size: 3rem !important;
+  }
+  .empty-state-title {
+    font-size: 1.2rem !important;
+  }
+  #sessionsBody td:nth-child(2),
+#sessionsBody th:nth-child(2) {
+  display: none !important;
+}
+#tableWrapper table thead tr th:nth-child(2){
+display: none;
+}
+#sessionsBody td:nth-child(5) .btn-cafe {
+  font-size: 0.6rem !important;
+  padding: 4px 10px !important;
+  min-width: 60px !important;
+}
+#sessionsBody td:last-child .btn-group{
+    flex-direction: column !important;
+    width: 50px;
+}
+
+}
+/* ---------- موبایل کوچک (زیر 480px) ---------- */
+@media (max-width: 480px) {
+  .header-top {
+    flex-direction: column;
+    align-items: center;
+  }
+  .btn-top {
+    font-size: 0.6rem;
+    padding: 3px 8px;
+  }
+  .theme-select {
+    width: 100px;
+    font-size: 0.6rem;
+  }
+  #sessionsBody td,
+  #sessionsBody th {
+    font-size: 0.6rem !important;
+    padding: 4px 4px !important;
+  }
+  .modal-content {
+    padding: 10px !important;
+  }
+}
