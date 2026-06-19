@@ -9,16 +9,34 @@ const {
 } = require('../../services/pricingService');
 const { decreaseStock, increaseStock } = require('../cafe/cafe.service');
 const { getReserveTimestamp } = require('../../utils/helpers');
+const User = require('../user/user.model');
 // helper: دریافت تنظیمات گیم‌نت
 async function getGameNetSettings(gameNetId) {
   const GameNet = require('../gameNet/gameNet.model');
   const gameNet = await GameNet.findById(gameNetId);
-  if (!gameNet) throw new Error('GameNet not found');
+  if (!gameNet) throw new Error('گیم‌نت یافت نشد');
   return gameNet.settings;
 }
 
 // شروع جلسه فعال (بدون رزرو)
-async function startSession(data, gameNetId) {
+async function startSession(data, gameNetId, reqUserId) {
+  const user = await User.findById(reqUserId).populate('gameNetId');
+  if (!user) throw new Error('کاربر یافت نشد');
+
+  // چک انقضای کاربر
+  if (user.expiresAt && new Date() > new Date(user.expiresAt)) {
+    throw new Error('حساب کاربری شما منقضی شده است.');
+  }
+
+  // چک انقضای گیم‌نت
+  if (user.role === 'admin' && user.gameNetId) {
+    if (!user.gameNetId.isActive) {
+      throw new Error('گیم‌نت غیرفعال است');
+    }
+    if (new Date() > new Date(user.gameNetId.expiresAt)) {
+      throw new Error('اشتراک گیم‌نت شما منقضی شده است.');
+    }
+  }
   const session = await Session.create({
     ...data,
     gameNetId,
@@ -50,7 +68,39 @@ async function startSession(data, gameNetId) {
 }
 
 // رزرو میز
-async function reserveSession(data, gameNetId) {
+async function reserveSession(data, gameNetId, reqUserId) {
+  const user = await User.findById(reqUserId).populate('gameNetId');
+  if (!user) throw new Error('کاربر یافت نشد');
+
+  // چک انقضای کاربر
+  if (user.expiresAt && new Date() > new Date(user.expiresAt)) {
+    throw new Error('حساب کاربری شما منقضی شده است.');
+  }
+
+  // چک انقضای گیم‌نت
+  if (user.role === 'admin' && user.gameNetId) {
+    if (!user.gameNetId.isActive) {
+      throw new Error('گیم‌نت غیرفعال است');
+    }
+    if (new Date() > new Date(user.gameNetId.expiresAt)) {
+      throw new Error('اشتراک گیم‌نت شما منقضی شده است.');
+    }
+  }
+  // ========== چک کردن فعال بودن میز ==========
+  const activeSession = await Session.findOne({
+    gameNetId,
+    table: data.table,
+    status: 'active',
+  });
+
+  if (activeSession && !data.ignoreWarning) {
+    const error = new Error(
+      'این میز در حال حاضر فعال است. آیا مطمئن هستید که می‌خواهید آن را رزرو کنید؟'
+    );
+    error.status = 409;
+    error.code = 'ACTIVE_TABLE_WARNING';
+    throw error;
+  }
   const reserveDateTime = getReserveTimestamp(data.date, data.timeStart);
   const session = await Session.create({
     ...data,
@@ -78,7 +128,23 @@ async function reserveSession(data, gameNetId) {
 async function startReservedSession(sessionId, gameNetId) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'reserved')
-    throw new Error('Invalid reservation');
+    throw new Error('رزرو معتبر نیست.');
+
+  // ========== چک کردن فعال بودن میز ==========
+  const activeSession = await Session.findOne({
+    gameNetId,
+    table: session.table,
+    status: 'active',
+    _id: { $ne: sessionId }, // غیر از خود جلسه (برای اطمینان)
+  });
+
+  if (activeSession) {
+    const error = new Error(
+      `میز "${session.table}" در حال حاضر فعال است. لطفاً ابتدا جلسه فعال را ببندید.`
+    );
+    error.status = 409;
+    throw error;
+  }
 
   // ذخیره مقادیر مورد نیاز برای لاگ (قبل از تغییر)
   const table = session.table;
@@ -116,7 +182,7 @@ async function startReservedSession(sessionId, gameNetId) {
 async function closeSession(sessionId, gameNetId, endTimeStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'active')
-    throw new Error('Session not active');
+    throw new Error('جلسه فعال نیست');
 
   const settings = await getGameNetSettings(gameNetId);
   const {
@@ -185,7 +251,7 @@ async function closeSession(sessionId, gameNetId, endTimeStr) {
 async function changeMode(sessionId, gameNetId, newMode, nowStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'active')
-    throw new Error('Session not active');
+    throw new Error('جلسه فعال نیست');
 
   // محاسبه آخرین بازه (از زمان شروع یا آخرین تغییر تا لحظه حال)
   const lastStart =
@@ -257,7 +323,7 @@ async function changeMode(sessionId, gameNetId, newMode, nowStr) {
 async function changeTable(sessionId, gameNetId, newTable, newMode, nowStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
   if (!session || session.status !== 'active')
-    throw new Error('Session not active');
+    throw new Error('جلسه فعال نیست');
 
   // محاسبه آخرین بازه (از زمان شروع یا آخرین تغییر تا لحظه حال)
   const lastStart =
@@ -339,14 +405,14 @@ async function changeTable(sessionId, gameNetId, newTable, newMode, nowStr) {
 // افزودن سفارش کافه به جلسه فعال یا بسته شده (با لاگ و به‌روزرسانی موجودی)
 async function addCafeOrder(sessionId, gameNetId, items) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
-  if (!session) throw new Error('Session not found');
+  if (!session) throw new Error('جلسه یافت نشد');
 
   let changes = []; // آرایه تغییرات
   let newCafeCost = session.cafeCost;
 
   for (let item of items) {
     const cafeItem = await CafeItem.findOne({ _id: item.id, gameNetId });
-    if (!cafeItem) throw new Error(`Cafe item ${item.id} not found`);
+    if (!cafeItem) throw new Error(`آیتم کافه با شناسه ${item.id} یافت نشد`);
 
     const existing = session.cafeItems.find((i) => i.id.toString() === item.id);
     const oldQty = existing ? existing.qty : 0;
@@ -405,7 +471,7 @@ async function addCafeOrder(sessionId, gameNetId, items) {
 // افزودن پیش‌پرداخت
 async function addPayment(sessionId, gameNetId, amount) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
-  if (!session) throw new Error('Session not found');
+  if (!session) throw new Error('جلسه یافت نشد');
   session.paidAmount += amount;
   session.logs.push({
     type: 'payment',
@@ -423,7 +489,7 @@ async function addPayment(sessionId, gameNetId, amount) {
 // ویرایش جلسه (فقط زمان شروع/پایان، دسته، تخفیف، یادداشت) – با محاسبه مجدد هزینه
 async function editSession(sessionId, gameNetId, updates, nowStr) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
-  if (!session) throw new Error('Session not found');
+  if (!session) throw new Error('جلسه یافت نشد');
 
   // ذخیره مقادیر قدیمی فقط برای فیلدهایی که قرار است تغییر کنند
   const oldValues = {};
@@ -532,7 +598,7 @@ async function editSession(sessionId, gameNetId, updates, nowStr) {
 // حذف جلسه (انتقال به سطل آشغال)
 async function deleteSession(sessionId, gameNetId, originalDay) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
-  if (!session) throw new Error('Session not found');
+  if (!session) throw new Error('جلسه یافت نشد');
   // بازگرداندن موجودی کافه
   for (let item of session.cafeItems) {
     await increaseStock(item.id, item.qty, gameNetId);
@@ -559,9 +625,9 @@ async function getSessionsByDay(gameNetId, day, date) {
 
 async function reactivateSession(sessionId, gameNetId) {
   const session = await Session.findOne({ _id: sessionId, gameNetId });
-  if (!session) throw new Error('Session not found');
+  if (!session) throw new Error('جلسه یافت نشد');
   if (session.status !== 'closed')
-    throw new Error('Only closed sessions can be reactivated');
+    throw new Error('فقط جلسات بسته شده قابل ادامه هستند');
 
   // محاسبه مدت زمان بسته بودن جلسه (برای لاگ)
   let downTimeMinutes = 0;

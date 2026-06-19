@@ -40,6 +40,43 @@
         </text>
       </symbol>
     </svg>
+
+    <!-- ================== نوار بالایی (فقط برای سوپرادمین) ================== -->
+    <div
+      id="superAdminBar"
+      style="
+        display: none;
+        background: var(--panel-bg);
+        padding: 8px 20px;
+        border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-sizing: border-box;
+      "
+    >
+      <button
+        class="btn btn-top"
+        onclick="window.location.href = 'users.html'"
+        style="border-color: var(--success); color: var(--success)"
+      >
+        👥 مدیریت کاربران
+      </button>
+      <div style="display: flex; align-items: center; gap: 15px">
+        <span style="color: var(--text-muted); font-size: 0.85rem"
+          >انتخاب گیم‌نت:</span
+        >
+        <select
+          id="superAdminGameNetSelect"
+          class="theme-select"
+          style="min-width: 180px; padding: 6px 12px"
+        >
+          <option value="">انتخاب گیم‌نت</option>
+        </select>
+      </div>
+    </div>
+
     <!-- ================== صفحه لاگین ================== -->
     <div id="loginScreen">
       <img class="login-video-bg" src="back.png" alt="background" />

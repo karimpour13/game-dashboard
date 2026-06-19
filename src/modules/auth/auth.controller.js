@@ -67,7 +67,7 @@ exports.verifySystemPassword = async (req, res, next) => {
       gameNetId = req.body.gameNetId;
     }
     const gameNet = await GameNet.findById(gameNetId);
-    if (!gameNet) throw new Error('GameNet not found');
+    if (!gameNet) throw new Error('گیم‌نت یافت نشد');
     const hash = gameNet.settings?.systemPassword;
     if (!hash) return res.json({ valid: true });
     const match = await bcrypt.compare(password, hash);

@@ -19,18 +19,28 @@ const generateTokens = (user, refreshExpiresIn) => {
 
 const login = async (username, password, rememberMe = false) => {
   const user = await User.findOne({ username }).populate('gameNetId');
-  if (!user) throw new Error('Invalid credentials');
-  if (!user.isActive) throw new Error('Account disabled');
-  if (
-    user.role === 'admin' &&
-    (!user.gameNetId ||
-      !user.gameNetId.isActive ||
-      new Date() > user.gameNetId.expiresAt)
-  ) {
-    throw new Error('GameNet expired or inactive');
+  if (!user) throw new Error('نام کاربری یا رمز عبور اشتباه است.');
+  if (!user.isActive) throw new Error('حساب کاربری غیرفعال است');
+  // ========== چک انقضای کاربر ==========
+  if (user.expiresAt && new Date() > new Date(user.expiresAt)) {
+    throw new Error(
+      'حساب کاربری شما منقضی شده است. لطفاً با پشتیبانی تماس بگیرید.'
+    );
+  }
+
+  // ========== چک انقضای گیم‌نت (برای ادمین) ==========
+  if (user.role === 'admin') {
+    if (!user.gameNetId)
+      throw new Error('گیم‌نتی برای این کاربر تعریف نشده است');
+    if (!user.gameNetId.isActive) {
+      throw new Error('گیم‌نت غیرفعال است');
+    }
+    if (new Date() > new Date(user.gameNetId.expiresAt)) {
+      throw new Error('اشتراک گیم‌نت شما منقضی شده است.');
+    }
   }
   const match = await bcrypt.compare(password, user.password);
-  if (!match) throw new Error('Invalid credentials');
+  if (!match) throw new Error('نام کاربری یا رمز عبور اشتباه است.');
 
   user.lastLogin = new Date();
   await user.save();
@@ -49,14 +59,14 @@ const login = async (username, password, rememberMe = false) => {
 
 const refreshTokens = async (refreshToken) => {
   const user = await User.findOne({ refreshToken });
-  if (!user) throw new Error('Invalid refresh token');
+  if (!user) throw new Error('توکن بازخوانی معتبر نیست');
   const daysSinceLastActivity =
     (Date.now() - user.lastActivity) / (1000 * 60 * 60 * 24);
   if (daysSinceLastActivity > 3) {
     // غیرفعال کردن توکن رفرش
     user.refreshToken = null;
     await user.save();
-    throw new Error('Session expired due to inactivity');
+    throw new Error('نشست شما به دلیل عدم فعالیت منقضی شده است');
   }
   try {
     jwt.verify(refreshToken, jwtRefreshSecret);
@@ -65,7 +75,7 @@ const refreshTokens = async (refreshToken) => {
     await user.save();
     return { accessToken, refreshToken: newRefreshToken };
   } catch (err) {
-    throw new Error('Refresh token expired');
+    throw new Error('توکن بازخوانی منقضی شده است');
   }
 };
 

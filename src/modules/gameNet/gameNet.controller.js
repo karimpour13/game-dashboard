@@ -113,7 +113,7 @@ exports.updateTheme = async (req, res, next) => {
       req.user.role === 'admin' &&
       req.user.gameNetId.toString() !== gameNet._id.toString()
     ) {
-      return next({ status: 403, message: 'Forbidden' });
+      return next({ status: 403, message: 'شما دسترسی لازم را ندارید' });
     }
     const updated = await gameNetService.updateTheme(req.params.id, theme);
     res.json(updated);

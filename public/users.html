@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>مدیریت کاربران</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <style>
+      /* استایل‌های اختصاصی صفحه کاربران */
+      body {
+        background: var(--bg-color);
+        color: var(--text-main);
+        min-height: 100vh;
+        margin: 0;
+        font-family: 'PortadaARA', sans-serif;
+        padding: 20px;
+      }
+      .users-container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      .users-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 15px;
+      }
+      .users-header h2 {
+        margin: 0;
+        background: linear-gradient(to right, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 1.8rem;
+      }
+      .users-table-wrapper {
+        background: var(--panel-bg);
+        border-radius: 15px;
+        padding: 20px;
+        overflow-x: auto;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(0, 243, 255, 0.1);
+      }
+      #usersTable {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      #usersTable th {
+        background: var(--th-bg);
+        color: var(--text-muted);
+        padding: 12px 15px;
+        text-align: center;
+        border-bottom: 2px solid rgba(0, 243, 255, 0.2);
+        white-space: nowrap;
+      }
+      #usersTable td {
+        padding: 12px 15px;
+        border-bottom: 1px solid rgba(150, 150, 150, 0.1);
+        vertical-align: middle;
+      }
+      #usersTable tr:hover {
+        background: rgba(0, 243, 255, 0.03);
+      }
+      .user-status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: bold;
+      }
+      .user-status-active {
+        background: rgba(0, 255, 102, 0.15);
+        color: var(--success);
+        border: 1px solid var(--success);
+      }
+      .user-status-inactive {
+        background: rgba(255, 0, 85, 0.15);
+        color: var(--warning);
+        border: 1px solid var(--warning);
+      }
+      .user-role-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: bold;
+      }
+      .user-role-superAdmin {
+        background: rgba(255, 215, 0, 0.15);
+        color: #ffd700;
+        border: 1px solid #ffd700;
+      }
+      .user-role-admin {
+        background: rgba(0, 243, 255, 0.15);
+        color: var(--primary);
+        border: 1px solid var(--primary);
+      }
+      .user-action-btn {
+        padding: 5px 12px;
+        border-radius: 6px;
+        border: none;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: 0.2s;
+        font-weight: bold;
+        margin: 0 3px;
+      }
+      .user-action-btn:hover {
+        transform: translateY(-1px);
+      }
+      .user-action-edit {
+        background: rgba(0, 243, 255, 0.15);
+        color: var(--primary);
+        border: 1px solid var(--primary);
+      }
+      .user-action-edit:hover {
+        background: var(--primary);
+        color: var(--bg-color);
+      }
+      .user-action-delete {
+        background: rgba(255, 0, 85, 0.15);
+        color: var(--warning);
+        border: 1px solid var(--warning);
+      }
+      .user-action-delete:hover {
+        background: var(--warning);
+        color: #fff;
+      }
+      .pagination-container {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+      }
+      .btn-pagination {
+        background: var(--panel-bg);
+        border: 1px solid rgba(150, 150, 150, 0.3);
+        color: var(--text-main);
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: 0.2s;
+        font-size: 0.85rem;
+      }
+      .btn-pagination:hover {
+        border-color: var(--primary);
+        background: rgba(0, 243, 255, 0.1);
+      }
+      .btn-pagination.active {
+        background: var(--primary);
+        color: var(--bg-color);
+        border-color: var(--primary);
+        cursor: default;
+      }
+      .btn-pagination:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .pagination-ellipsis {
+        display: inline-flex;
+        align-items: center;
+        padding: 0 6px;
+        color: var(--text-muted);
+      }
+      .users-empty {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-muted);
+      }
+      .btn-back {
+        background: var(--panel-bg);
+        border: 1px solid var(--warning);
+        color: var(--warning);
+        padding: 8px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: 0.2s;
+        font-weight: bold;
+      }
+      .btn-back:hover {
+        background: var(--warning);
+        color: var(--bg-color);
+      }
+
+      /* ================== استایل خطاهای فیلد ================== */
+      .field-error {
+        color: var(--warning);
+        font-size: 0.8rem;
+        margin-top: 5px;
+        display: none;
+        padding: 4px 8px;
+        background: rgba(255, 0, 85, 0.1);
+        border-radius: 6px;
+        border-right: 3px solid var(--warning);
+      }
+      .field-error.show {
+        display: block !important;
+      }
+      .input-group.error input,
+      .input-group.error select {
+        border-color: var(--warning) !important;
+        box-shadow: 0 0 0 2px rgba(255, 0, 85, 0.2) !important;
+      }
+
+      /* استایل‌های مودال فرم کاربر */
+      #userForm .input-group {
+        margin-bottom: 15px;
+      }
+      #userForm .input-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+      #userForm .input-group input,
+      #userForm .input-group select {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--input-bg);
+        border: 1px solid rgba(150, 150, 150, 0.3);
+        border-radius: 8px;
+        color: var(--text-main);
+        font-family: inherit;
+        transition: 0.2s;
+      }
+      #userForm .input-group input:focus,
+      #userForm .input-group select:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+      }
+      #userForm .input-group input.error,
+      #userForm .input-group select.error {
+        border-color: var(--warning);
+      }
+
+      @media (max-width: 700px) {
+        .users-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        #usersTable {
+          font-size: 0.8rem;
+        }
+        #usersTable th,
+        #usersTable td {
+          padding: 8px 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="users-container">
+      <!-- هدر -->
+      <div class="users-header">
+        <h2>👥 مدیریت کاربران</h2>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <button class="btn btn-success" onclick="openAddUserModal()">
+            ➕ افزودن کاربر جدید
+          </button>
+          <button class="btn-back" onclick="window.location.href = '/'">
+            ← بازگشت به صفحه اصلی
+          </button>
+        </div>
+      </div>
+
+      <!-- جدول -->
+      <div class="users-table-wrapper">
+        <table id="usersTable">
+          <thead>
+            <tr>
+              <th style="text-align: center">#</th>
+              <th style="text-align: right">نام کامل</th>
+              <th style="text-align: right">نام کاربری</th>
+              <th style="text-align: right">ایمیل</th>
+              <th style="text-align: center">نقش</th>
+              <th style="text-align: center">گیم‌نت</th>
+              <th style="text-align: center">وضعیت</th>
+              <th style="text-align: center">عملیات</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr>
+              <td colspan="8" class="users-empty">⏳ در حال بارگذاری...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination-container" id="usersPagination"></div>
+    </div>
+
+    <!-- ================== مودال سفارشی (برای alert/confirm) ================== -->
+    <div id="customModal" class="modal-overlay" style="z-index: 10000">
+      <div class="modal-content" style="width: 350px; text-align: center">
+        <h3 id="customModalTitle">پیام</h3>
+        <div id="customModalBody" style="margin: 20px 0"></div>
+        <div style="display: flex; gap: 10px; justify-content: center">
+          <button id="customModalConfirmBtn" class="btn btn-success">
+            تأیید
+          </button>
+          <button
+            id="customModalCancelBtn"
+            class="btn btn-danger"
+            style="display: none"
+          >
+            انصراف
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================== مودال فرم کاربر (دو بخشی با نمایش خطا زیر هر فیلد) ================== -->
+    <div id="userFormModal" class="modal-overlay-custom">
+      <div
+        class="modal-content-custom"
+        style="max-width: 750px; max-height: 90vh"
+      >
+        <div class="modal-header-custom">
+          <h3 id="userFormTitle">➕ افزودن کاربر جدید به همراه گیم‌نت</h3>
+          <button class="modal-close-custom" onclick="closeUserFormModal()">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body-custom" style="overflow-y: auto">
+          <form id="userForm">
+            <input type="hidden" id="editUserId" value="" />
+            <input type="hidden" id="editGameNetId" value="" />
+
+            <!-- ==================== بخش اول: اطلاعات کاربر ==================== -->
+            <div
+              style="
+                border-bottom: 2px solid var(--primary);
+                padding-bottom: 15px;
+                margin-bottom: 20px;
+              "
+            >
+              <h4 style="color: var(--primary); margin: 0 0 15px 0">
+                👤 اطلاعات کاربر
+              </h4>
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px"
+              >
+                <div class="input-group">
+                  <label>نام</label>
+                  <input
+                    type="text"
+                    id="userFirstName"
+                    placeholder="نام"
+                    required
+                  />
+                  <div id="firstNameError" class="field-error"></div>
+                </div>
+                <div class="input-group">
+                  <label>نام خانوادگی</label>
+                  <input
+                    type="text"
+                    id="userLastName"
+                    placeholder="نام خانوادگی"
+                    required
+                  />
+                  <div id="lastNameError" class="field-error"></div>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label>نام کاربری</label>
+                <input
+                  type="text"
+                  id="userUsername"
+                  placeholder="نام کاربری"
+                  required
+                />
+                <div id="usernameError" class="field-error"></div>
+              </div>
+
+              <div class="input-group">
+                <label>ایمیل</label>
+                <input
+                  type="email"
+                  id="userEmail"
+                  placeholder="example@domain.com"
+                  required
+                />
+                <div id="emailError" class="field-error"></div>
+              </div>
+
+              <div class="input-group" id="passwordFieldGroup">
+                <label>رمز عبور</label>
+                <input
+                  type="password"
+                  id="userPassword"
+                  placeholder="••••••••"
+                />
+                <small style="color: var(--text-muted)"
+                  >(در ویرایش، اگر خالی بماند، رمز قبلی حفظ می‌شود)</small
+                >
+                <div id="passwordError" class="field-error"></div>
+              </div>
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px"
+              >
+                <div class="input-group">
+                  <label>نقش</label>
+                  <select id="userRole">
+                    <option value="admin">ادمین</option>
+                    <option value="superAdmin">سوپرادمین</option>
+                  </select>
+                  <div id="roleError" class="field-error"></div>
+                </div>
+                <div class="input-group">
+                  <label>وضعیت</label>
+                  <select id="userStatus">
+                    <option value="true">فعال</option>
+                    <option value="false">غیرفعال</option>
+                  </select>
+                  <div id="statusError" class="field-error"></div>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label>تاریخ انقضای کاربر (اختیاری)</label>
+                <input type="datetime-local" id="userExpiresAt" />
+                <small style="color: var(--text-muted)"
+                  >اگر خالی باشد، نامحدود در نظر گرفته می‌شود.</small
+                >
+                <div id="expiresAtError" class="field-error"></div>
+              </div>
+            </div>
+
+            <!-- ==================== بخش دوم: اطلاعات گیم‌نت ==================== -->
+            <div
+              id="gameNetSection"
+              style="
+                border-bottom: 2px solid var(--secondary);
+                padding-bottom: 15px;
+                margin-bottom: 20px;
+              "
+            >
+              <h4 style="color: var(--secondary); margin: 0 0 15px 0">
+                🏢 اطلاعات گیم‌نت (برای ادمین‌ها)
+              </h4>
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px"
+              >
+                <div class="input-group">
+                  <label>نام گیم‌نت</label>
+                  <input
+                    type="text"
+                    id="gameNetName"
+                    placeholder="نام گیم‌نت"
+                    required
+                  />
+                  <div id="gameNetNameError" class="field-error"></div>
+                </div>
+                <div class="input-group">
+                  <label>تلفن</label>
+                  <input type="text" id="gameNetPhone" placeholder="۰۲۱-XXXX" />
+                  <div id="gameNetPhoneError" class="field-error"></div>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label>آدرس</label>
+                <input
+                  type="text"
+                  id="gameNetAddress"
+                  placeholder="آدرس کامل"
+                />
+                <div id="gameNetAddressError" class="field-error"></div>
+              </div>
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px"
+              >
+                <div class="input-group">
+                  <label>تاریخ انقضای گیم‌نت</label>
+                  <input type="datetime-local" id="gameNetExpiresAt" required />
+                  <small style="color: var(--text-muted)">(اجباری)</small>
+                  <div id="gameNetExpiresAtError" class="field-error"></div>
+                </div>
+                <div class="input-group">
+                  <label>وضعیت گیم‌نت</label>
+                  <select id="gameNetStatus">
+                    <option value="true">فعال</option>
+                    <option value="false">غیرفعال</option>
+                  </select>
+                  <div id="gameNetStatusError" class="field-error"></div>
+                </div>
+              </div>
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px"
+              >
+                <div class="input-group">
+                  <label>واحد پول</label>
+                  <select id="gameNetPriceUnit">
+                    <option value="Toman">تومان</option>
+                    <option value="Rial">ریال</option>
+                  </select>
+                  <div id="gameNetPriceUnitError" class="field-error"></div>
+                </div>
+                <div class="input-group">
+                  <label>قانون حداقل یک ساعت</label>
+                  <select id="gameNetMinHour">
+                    <option value="true">فعال</option>
+                    <option value="false">غیرفعال</option>
+                  </select>
+                  <div id="gameNetMinHourError" class="field-error"></div>
+                </div>
+              </div>
+
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px"
+              >
+                <div class="input-group">
+                  <label>گرد کردن قیمت به پایین</label>
+                  <select id="gameNetRoundDown">
+                    <option value="false">غیرفعال</option>
+                    <option value="true">فعال</option>
+                  </select>
+                  <div id="gameNetRoundDownError" class="field-error"></div>
+                </div>
+                <div class="input-group">
+                  <label>گرد کردن قیمت به بالا</label>
+                  <select id="gameNetRoundUp">
+                    <option value="false">غیرفعال</option>
+                    <option value="true">فعال</option>
+                  </select>
+                  <div id="gameNetRoundUpError" class="field-error"></div>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label>رمز عبور سیستم (اختیاری)</label>
+                <input
+                  type="password"
+                  id="gameNetSystemPassword"
+                  placeholder="برای امنیت بیشتر"
+                />
+                <small style="color: var(--text-muted)"
+                  >در صورت خالی بودن، قفل امنیتی غیرفعال می‌شود.</small
+                >
+                <div id="gameNetSystemPasswordError" class="field-error"></div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              class="btn-submit"
+              style="width: 100%; margin-top: 10px"
+            >
+              💾 ایجاد کاربر و گیم‌نت
+            </button>
+            <div
+              id="userFormStatus"
+              class="form-status"
+              style="margin-top: 10px"
+            ></div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================== اسکریپت‌ها ================== -->
+    <script src="script.js"></script>
+    <script src="users.js"></script>
+  </body>
+</html>

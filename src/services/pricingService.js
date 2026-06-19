@@ -34,7 +34,7 @@ async function getPricingRate(consoleType, mode, tableName, gameNetId) {
   });
   if (!device) {
     console.warn(
-      `Device not found for table: "${cleanTableName}" (original: "${tableName}")`
+      `دستگاه یافت نشد for table: "${cleanTableName}" (original: "${tableName}")`
     );
     return 0;
   }
